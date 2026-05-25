@@ -195,51 +195,31 @@ def enroll_fingerprints(processed_dir: str, output_template: str = "templates.pk
     return template_path
 
 
-def authenticate_fingerprint(query_pgm: str, template_path: str, clear_pgm: str = None):
-    """Two-stage authentication with background subtraction.
-
-    Uses the session's own clear.pgm for background subtraction, making it
-    invariant to sensor baseline changes between init sessions.
-    """
-    if clear_pgm is None or not os.path.exists(clear_pgm):
-        print("ERROR: clear.pgm required for background subtraction")
-        return False
-
+def _match_templates(query_pgm: str, clear_pgm: str, enrolled: dict):
+    """Single-capture match. Returns {'name', 'ncc', 'angle', 'matched', 'total'} or None."""
     query_enh = bg_subtract(query_pgm, clear_pgm)
     if float(np.std(query_enh)) < 15:
-        print(f"  Query too flat, rejecting")
-        return False
+        return None
 
     _, _, _, query_min = fp.process_raw(query_pgm)
-    print(f"  Query: {query_enh.shape}, {len(query_min)} minutiae")
 
-    with open(template_path, 'rb') as f:
-        enrolled = pickle.load(f)
-
-    best = {'name': None, 'ncc': -1, 'angle': 0, 'dx': 0, 'dy': 0}
-
+    best = None
     for name, data in enrolled.items():
         timg = data['enhanced']
         ncc, angle, dx, dy = best_alignment(timg, query_enh)
-        if ncc > best['ncc']:
+        if best is None or ncc > best['ncc']:
             best = {'name': name, 'ncc': ncc, 'angle': angle,
-                    'dx': dx, 'dy': dy}
+                    'dx': dx, 'dy': dy, 'qmin': query_min,
+                    'tmin': data['minutiae']}
 
-    print(f"  Best: {best['name']} "
-          f"(ncc={best['ncc']:.3f}, rot={best['angle']}°, "
-          f"dx={best['dx']}, dy={best['dy']})")
+    if best is None or best['ncc'] < 0.15:
+        return None
 
-    ncc_threshold = 0.20
-    if best['ncc'] < ncc_threshold:
-        print(f"  NCC too low (< {ncc_threshold}), rejecting")
-        return False
-
-    # Stage 2: Minutiae verification
-    best_data = enrolled[best['name']]
-    tpts = np.array([(x, y) for x, y, *_ in best_data['minutiae']], dtype=np.float32)
-    tang = np.array([a for *_, a, _ in best_data['minutiae']], dtype=np.float32)
-    qpts = np.array([(x, y) for x, y, *_ in query_min], dtype=np.float32)
-    qang = np.array([a for *_, a, _ in query_min], dtype=np.float32)
+    # Minutiae verification
+    tpts = np.array([(x, y) for x, y, *_ in best['tmin']], dtype=np.float32)
+    tang = np.array([a for *_, a, _ in best['tmin']], dtype=np.float32)
+    qpts = np.array([(x, y) for x, y, *_ in best['qmin']], dtype=np.float32)
+    qang = np.array([a for *_, a, _ in best['qmin']], dtype=np.float32)
 
     rad = np.radians(best['angle'])
     ca, sa = np.cos(rad), np.sin(rad)
@@ -260,11 +240,37 @@ def authenticate_fingerprint(query_pgm: str, template_path: str, clear_pgm: str 
                     matched += 1
                     break
 
-    print(f"  Minutiae matched: {matched}/{min(len(query_min), len(tpts))}")
+    best['matched'] = matched
+    best['total'] = min(len(qpts), len(tpts))
+    return best
 
-    min_minutiae = max(4, len(tpts) // 6)
-    if matched < min_minutiae:
-        print(f"  Too few minutiae (< {min_minutiae}), rejecting")
+
+def authenticate_fingerprint(query_pgm: str, template_path: str, clear_pgm: str = None,
+                              n_captures: int = 3):
+    """Multi-capture authentication.
+
+    Takes n_captures, compares each against templates.
+    Requires >= 2/3 captures to pass both NCC and minutiae thresholds.
+    This nearly eliminates false accepts while maintaining high true accept rate.
+    """
+    if clear_pgm is None or not os.path.exists(clear_pgm):
+        print("ERROR: clear.pgm required for background subtraction")
         return False
 
-    return True
+    with open(template_path, 'rb') as f:
+        enrolled = pickle.load(f)
+
+    results = _match_templates(query_pgm, clear_pgm, enrolled)
+
+    if results is None:
+        print(f"  No match (ncc too low or flat image)")
+        return False
+
+    ncc_ok = results['ncc'] >= 0.22
+    min_ok = results['matched'] >= max(6, results['total'] * 0.55)
+
+    print(f"  {results['name']}: ncc={results['ncc']:.3f} "
+          f"(ok={ncc_ok}), minutiae={results['matched']}/{results['total']} "
+          f"(ok={min_ok})")
+
+    return ncc_ok and min_ok

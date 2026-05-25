@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 def main():
     parser = argparse.ArgumentParser(description="Authenticate fingerprint")
     parser.add_argument("--templates", default="enrolled",
-                        help="Directory with templates.pkl")
+                        help="Directory with templates.pkl and clear.pgm")
     args = parser.parse_args()
 
     from goodix5385 import driver, matcher
@@ -23,19 +23,33 @@ def main():
     print("Initializing Goodix 5385 sensor...")
     device, calib_params = driver.initialize_device()
 
-    raw_path = "/tmp/auth_raw.pgm"
     clear_path = os.path.join(args.templates, "clear.pgm")
+    if not os.path.exists(clear_path):
+        print("No clear.pgm in templates dir")
+        sys.exit(1)
 
-    print("\nPlace your finger on the sensor for authentication...")
-    driver.capture_fingerprint(device, calib_params, raw_path)
+    successes = 0
+    attempts = 3
 
-    result = matcher.authenticate_fingerprint(raw_path, template_path, clear_pgm=clear_path)
+    for i in range(attempts):
+        print(f"\nCapture {i+1}/{attempts} — Place finger on sensor...")
+        raw_path = f"/tmp/auth_raw_{i}.pgm"
+        driver.capture_fingerprint(device, calib_params, raw_path)
 
-    if result:
-        print("\nAUTHENTICATION SUCCESSFUL - Fingerprint matched!")
+        result = matcher.authenticate_fingerprint(raw_path, template_path,
+                                                    clear_pgm=clear_path)
+        if result:
+            successes += 1
+            print(f"  Capture {i+1}: MATCH")
+        else:
+            print(f"  Capture {i+1}: no match")
+
+    print(f"\n{successes}/{attempts} captures matched")
+    if successes >= 2:
+        print("AUTHENTICATION SUCCESSFUL")
         return 0
     else:
-        print("\nAUTHENTICATION FAILED - Fingerprint did not match.")
+        print("AUTHENTICATION FAILED")
         return 1
 
 
