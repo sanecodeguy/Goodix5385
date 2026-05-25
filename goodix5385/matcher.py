@@ -17,13 +17,27 @@ from . import fingerprint as fp
 # ─── Image enhancement ───────────────────────────────────────────────────────
 
 def enhance_raw(pgm_path: str):
-    """Read raw PGM, crop border, normalize, CLAHE, return 8-bit."""
+    """Read raw PGM, crop border, high-pass filter to remove background, CLAHE.
+
+    Uses large Gaussian blur to estimate background instead of clear.pgm,
+    making it invariant to sensor calibration changes between sessions.
+    """
     width, height, depth, pixels = tool.read_pgm(pgm_path)
     img = np.array(pixels, dtype=np.uint16).reshape(height, width)
     img = img[1:height - 1, 1:width - 1]
-    img_8u = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(img_8u)
+    img_f = np.float32(img)
+
+    bg = cv2.GaussianBlur(img_f, (25, 25), 0)
+    hp = img_f - bg
+    hp = hp - np.min(hp)
+
+    if np.max(hp) > 0:
+        hp = hp / np.max(hp) * 255.0
+    hp = np.clip(hp, 0, 255).astype(np.uint8)
+
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(hp)
+
     blurred = cv2.GaussianBlur(enhanced, (3, 3), 0.5)
     return blurred
 
