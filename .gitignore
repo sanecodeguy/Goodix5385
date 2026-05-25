@@ -1,0 +1,12 @@
+*.pyc
+__pycache__/
+*.pgm
+*.png
+*.jpg
+*.yml
+*.out
+*.o
+*.so
+*.a
+enrolled/
+.DS_Store

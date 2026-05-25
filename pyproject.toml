@@ -1,0 +1,8 @@
+[package]
+name = "goodix5385"
+version = "0.1.0"
+description = "Goodix 5385 Fingerprint Driver for Dell XPS 13 9380"
+authors = ["sanecodeguy"]
+
+[tool.setuptools.packages.find]
+include = ["goodix5385*"]
