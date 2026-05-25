@@ -15,42 +15,23 @@ def main():
     from goodix5385 import driver, matcher
 
     template_path = os.path.join(args.templates, "templates.pkl")
+    clear_path = os.path.join(args.templates, "clear.pgm")
     if not os.path.exists(template_path):
-        print(f"Error: no templates found at {template_path}")
-        print("Run enrollment first: python scripts/enroll.py")
+        print(f"Error: no templates at {template_path}")
         sys.exit(1)
 
     print("Initializing Goodix 5385 sensor...")
     device, calib_params = driver.initialize_device()
 
-    clear_path = os.path.join(args.templates, "clear.pgm")
-    if not os.path.exists(clear_path):
-        print("No clear.pgm in templates dir")
-        sys.exit(1)
+    raw_path = "/tmp/auth_raw.pgm"
 
-    successes = 0
-    attempts = 3
+    print("\nPlace your finger on the sensor...")
+    driver.capture_fingerprint(device, calib_params, raw_path)
 
-    for i in range(attempts):
-        print(f"\nCapture {i+1}/{attempts} — Place finger on sensor...")
-        raw_path = f"/tmp/auth_raw_{i}.pgm"
-        driver.capture_fingerprint(device, calib_params, raw_path)
+    result = matcher.authenticate_fingerprint(raw_path, template_path, clear_pgm=clear_path)
 
-        result = matcher.authenticate_fingerprint(raw_path, template_path,
-                                                    clear_pgm=clear_path)
-        if result:
-            successes += 1
-            print(f"  Capture {i+1}: MATCH")
-        else:
-            print(f"  Capture {i+1}: no match")
-
-    print(f"\n{successes}/{attempts} captures matched")
-    if successes >= 2:
-        print("AUTHENTICATION SUCCESSFUL")
-        return 0
-    else:
-        print("AUTHENTICATION FAILED")
-        return 1
+    print(f"\n{'AUTHENTICATION SUCCESSFUL' if result else 'AUTHENTICATION FAILED'}")
+    return 0 if result else 1
 
 
 if __name__ == "__main__":

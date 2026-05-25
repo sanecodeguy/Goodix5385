@@ -1,10 +1,10 @@
-"""Fingerprint enrollment and authentication.
+"""Fingerprint enrollment and authentication with composite templates.
 
-Two-stage matching:
-  1. Primary: Phase correlation alignment + Normalized Cross-Correlation
-  2. Secondary: Minutiae-based Hough matching (rejects false positives)
+Uses background subtraction (within session) for calibration invariance,
+then builds composite templates from multiple enrollment captures
+(fusing minutiae into a single reference frame), matching what Windows does.
 
-Enhancement: CLAHE only (no Gabor, to avoid session-dependent artifacts)
+Matching: query image → bg_subtract → NCC vs mosaic + minutiae vs composite.
 """
 import os
 import pickle
@@ -14,263 +14,219 @@ from . import tool
 from . import fingerprint as fp
 
 
-# ─── Image enhancement ───────────────────────────────────────────────────────
-
-def enhance_raw(pgm_path: str):
-    """Read raw PGM, crop border, normalize to 8-bit.
-
-    For matching we use session-local background subtraction separately
-    (clear subtracted from finger image within each session).
-    """
-    width, height, depth, pixels = tool.read_pgm(pgm_path)
-    img = np.array(pixels, dtype=np.uint16).reshape(height, width)
-    img = img[1:height - 1, 1:width - 1]
-    img_8u = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    return img_8u
-
+# ─── Background subtraction ─────────────────────────────────────────────────
 
 def bg_subtract(finger_path: str, clear_path: str):
-    """Subtract clear from finger image within same session.
-
-    This removes the sensor's baseline pattern (which changes each init).
-    Result should be the same fingerprint signal regardless of the baseline.
-    """
-    wf, hf, _, fpixels = tool.read_pgm(finger_path)
-    wc, hc, _, cpixels = tool.read_pgm(clear_path)
+    """Subtract clear from finger within same session, crop, CLAHE."""
+    wf, hf, _, fpix = tool.read_pgm(finger_path)
+    wc, hc, _, cpix = tool.read_pgm(clear_path)
     assert wf == wc and hf == hc
-
-    finger = np.array(fpixels, dtype=np.int32).reshape(hf, wf)
-    clear = np.array(cpixels, dtype=np.int32).reshape(hc, wc)
-
-    # clear - finger: ridges are darker (lower capacitance)
-    diff = clear - finger
-    diff = diff + 2048
+    finger = np.array(fpix, dtype=np.int32).reshape(hf, wf)
+    clear = np.array(cpix, dtype=np.int32).reshape(hc, wc)
+    diff = clear - finger + 2048
     diff = np.clip(diff, 0, 4095).astype(np.uint16)
-
-    # crop border
     diff = diff[1:hf - 1, 1:wf - 1]
     img_8u = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-
     clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
-    enhanced = clahe.apply(img_8u)
-
-    return enhanced
+    return clahe.apply(img_8u)
 
 
-# ─── Phase correlation alignment ────────────────────────────────────────────
+# ─── Alignment ──────────────────────────────────────────────────────────────
 
-def phase_align(template, query):
-    """Find best translation between query and template using phase correlation.
-
-    Returns (dx, dy, ncc_score) where dx,dy is the translation to apply
-    to query to align with template, and ncc_score is the best NCC after
-    alignment.
-    """
-    th, tw = template.shape
-    qh, qw = query.shape
-    if th == 0 or tw == 0 or qh == 0 or qw == 0:
-        return 0, 0, 0.0
-
-    max_h, max_w = max(th, qh), max(tw, qw)
+def _phase_corr(template, query):
+    """Phase correlation to find translation between two equal-sized images."""
     size = 1
-    while size < max(max_h, max_w):
+    while size < max(*template.shape):
         size *= 2
-
-    tf = np.float32(template)
-    qf = np.float32(query)
-    tf_pad = np.zeros((size, size), dtype=np.float32)
-    qf_pad = np.zeros((size, size), dtype=np.float32)
-    tf_pad[:th, :tw] = tf
-    qf_pad[:qh, :qw] = qf
-
-    tf_pad -= np.mean(tf_pad)
-    qf_pad -= np.mean(qf_pad)
-
-    Tf = np.fft.fft2(tf_pad)
-    Qf = np.fft.fft2(qf_pad)
-    cross = Tf * np.conj(Qf)
-    cross_norm = cross / (np.abs(cross) + 1e-10)
-    phase = np.fft.ifft2(cross_norm)
-    phase = np.fft.fftshift(phase)
-    phase_real = np.real(phase)
-
-    max_idx = np.unravel_index(np.argmax(phase_real), phase_real.shape)
-    dy = max_idx[0] - size // 2
-    dx = max_idx[1] - size // 2
-
-    m = np.array([[1, 0, dx], [0, 1, dy]], dtype=np.float32)
-    aligned = cv2.warpAffine(query, m, (tw, th))
-
-    tn = cv2.normalize(template.astype(np.float32), None, 0, 1, cv2.NORM_MINMAX)
-    an = cv2.normalize(aligned.astype(np.float32), None, 0, 1, cv2.NORM_MINMAX)
-    tm = tn - np.mean(tn)
-    am = an - np.mean(an)
-    num = np.sum(tm * am)
-    den = np.sqrt(np.sum(tm ** 2) * np.sum(am ** 2))
-    ncc = float(num / den) if den > 1e-6 else 0.0
-
-    return dx, dy, ncc
+    tf = np.float32(template) - np.mean(template)
+    qf = np.float32(query) - np.mean(query)
+    tp = np.zeros((size, size), dtype=np.float32)
+    qp = np.zeros((size, size), dtype=np.float32)
+    tp[:template.shape[0], :template.shape[1]] = tf
+    qp[:query.shape[0], :query.shape[1]] = qf
+    cross = np.fft.fft2(tp) * np.conj(np.fft.fft2(qp))
+    phase = np.fft.fftshift(np.real(np.fft.ifft2(cross / (np.abs(cross) + 1e-10))))
+    idx = np.unravel_index(np.argmax(phase), phase.shape)
+    dy = idx[0] - size // 2
+    dx = idx[1] - size // 2
+    return dx, dy
 
 
-# ─── Rotation-tolerant alignment ────────────────────────────────────────────
-
-def best_alignment(template, query):
-    """Search over rotations and translations for best NCC alignment.
-
-    Brute-force over [-20, 20]° in 5° steps, with phase correlation for
-    translation at each rotation.
-    """
+def best_align(ref, query):
+    """Find best rotation+translation to align query to ref. Returns (ncc, angle, dx, dy)."""
     best = {'ncc': -1, 'angle': 0, 'dx': 0, 'dy': 0}
-    th, tw = template.shape
+    th, tw = ref.shape
     center = (tw / 2, th / 2)
-
-    for angle in range(-20, 21, 5):
+    for angle in range(-15, 16, 5):
         M = cv2.getRotationMatrix2D(center, angle, 1.0)
         rotated = cv2.warpAffine(query, M, (tw, th),
                                  flags=cv2.INTER_CUBIC,
                                  borderMode=cv2.BORDER_REFLECT)
-
-        dx, dy, ncc = phase_align(template, rotated)
+        dx, dy = _phase_corr(ref, rotated)
+        aligned = np.roll(rotated, (-dy, -dx), axis=(0, 1))
+        tn = ref.astype(np.float32) - np.mean(ref)
+        an = aligned.astype(np.float32) - np.mean(aligned)
+        ncc = np.sum(tn * an) / (np.sqrt(np.sum(tn ** 2) * np.sum(an ** 2)) + 1e-10)
         if ncc > best['ncc']:
             best = {'ncc': ncc, 'angle': angle, 'dx': dx, 'dy': dy}
-
     return best['ncc'], best['angle'], best['dx'], best['dy']
 
 
-def apply_transform(query, angle, dx, dy, size):
-    """Apply rotation + translation to align query with template."""
-    center = (size[1] / 2, size[0] / 2)
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    M[0, 2] += dx
-    M[1, 2] += dy
-    return cv2.warpAffine(query, M, (size[1], size[0]),
-                          flags=cv2.INTER_CUBIC,
-                          borderMode=cv2.BORDER_REFLECT)
+# ─── Composite template building ────────────────────────────────────────────
+
+def _merge_minutiae(minutiae_list, angles, dxs, dys, dist_thresh=5):
+    """Merge minutiae from multiple aligned captures into one set."""
+    all_pts = []
+    for mins, angle, dx, dy in zip(minutiae_list, angles, dxs, dys):
+        rad = np.radians(angle)
+        ca, sa = np.cos(rad), np.sin(rad)
+        for x, y, a, mtype in mins:
+            rx = x * ca - y * sa + dx
+            ry = x * sa + y * ca + dy
+            ra = (a + angle) % 360
+            all_pts.append((rx, ry, ra, mtype))
+
+    merged = []
+    for pt in all_pts:
+        x, y, a, mtype = pt
+        dup = False
+        for mx, my, *_ in merged:
+            if abs(x - mx) + abs(y - my) < dist_thresh:
+                dup = True
+                break
+        if not dup:
+            merged.append(pt)
+    return merged
+
+
+def _mosaic_image(images, angles, dxs, dys):
+    """Blend multiple aligned images into a mosaic."""
+    ref = images[0].astype(np.float32)
+    th, tw = ref.shape
+    center = (tw / 2, th / 2)
+    acc = ref.copy()
+    count = np.ones((th, tw), dtype=np.float32)
+
+    for img, angle, dx, dy in zip(images[1:], angles[1:], dxs[1:], dys[1:]):
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotated = cv2.warpAffine(img.astype(np.float32), M, (tw, th),
+                                 flags=cv2.INTER_CUBIC,
+                                 borderMode=cv2.BORDER_REFLECT)
+        aligned = np.roll(rotated, (-dy, -dx), axis=(0, 1))
+        mask = np.ones((th, tw), dtype=np.float32)
+        acc += aligned
+        count += mask
+
+    mosaic = acc / count
+    lo, hi = mosaic.min(), mosaic.max()
+    if hi > lo:
+        mosaic = (mosaic - lo) / (hi - lo) * 255
+    return np.clip(mosaic, 0, 255).astype(np.uint8)
 
 
 # ─── Template management ────────────────────────────────────────────────────
 
 def enroll_fingerprints(processed_dir: str, output_template: str = "templates.pkl",
                         clear_pgm: str = None):
-    """Enroll fingerprints from raw PGM files in a directory.
-
-    Uses background subtraction with the session's clear.pgm to remove
-    the sensor baseline. Stores enhanced image + minutiae for matching.
-    """
-    templates = {}
-
+    """Build a composite template from all raw captures in the directory."""
     if clear_pgm is None:
         clear_pgm = os.path.join(processed_dir, "clear.pgm")
     if not os.path.exists(clear_pgm):
-        print("ERROR: clear.pgm not found. Run sensor init first.")
+        print("ERROR: clear.pgm not found")
         return None
 
-    for fname in sorted(os.listdir(processed_dir)):
-        if not fname.startswith("raw_") or not fname.endswith(".pgm"):
-            continue
+    raws = sorted([f for f in os.listdir(processed_dir)
+                   if f.startswith("raw_") and f.endswith(".pgm")])
+    if len(raws) < 2:
+        print("ERROR: need at least 2 raw captures")
+        return None
+
+    images, minutiae_list, angles_list, dxs_list, dys_list = [], [], [], [], []
+
+    for fname in raws:
         path = os.path.join(processed_dir, fname)
-        print(f"  Processing {fname}...")
-
         enhanced = bg_subtract(path, clear_pgm)
-        _, _, _, minutiae = fp.process_raw(path)
+        _, _, _, mins = fp.process_raw(path)
+        images.append(enhanced)
+        minutiae_list.append(mins)
+        print(f"  {fname}: enhanced={enhanced.shape}, {len(mins)} minutiae")
 
-        if len(minutiae) < 5:
-            print(f"    Only {len(minutiae)} minutiae, skipping")
-            continue
+    # Align all to the first image
+    angles_list = [0.0]
+    dxs_list = [0.0]
+    dys_list = [0.0]
+    for i in range(1, len(images)):
+        ncc, angle, dx, dy = best_align(images[0], images[i])
+        angles_list.append(float(angle))
+        dxs_list.append(float(dx))
+        dys_list.append(float(dy))
+        print(f"  Aligned {raws[i]} → {raws[0]}: ncc={ncc:.3f}, "
+              f"rot={angle}°, dx={dx}, dy={dy}")
 
-        templates[fname] = {
-            'enhanced': enhanced,
-            'minutiae': minutiae,
-        }
-        print(f"    enhanced={enhanced.shape}, minutiae={len(minutiae)}")
+    # Merge
+    merged = _merge_minutiae(minutiae_list, angles_list, dxs_list, dys_list)
+    mosaic = _mosaic_image(images, angles_list, dxs_list, dys_list)
+    print(f"  Composite: {len(merged)} minutiae (from {sum(len(m) for m in minutiae_list)} total)")
 
-    if not templates:
-        print("ERROR: No valid templates found!")
-        return None
+    template = {
+        'mosaic': mosaic,
+        'minutiae': merged,
+        'individual': images,
+    }
 
     template_path = os.path.join(processed_dir, output_template)
     with open(template_path, 'wb') as f:
-        pickle.dump(templates, f)
-    print(f"Saved {len(templates)} templates to {template_path}")
+        pickle.dump(template, f)
+    print(f"Saved composite template ({len(merged)} merged minutiae) to {template_path}")
     return template_path
 
 
-def _match_templates(query_pgm: str, clear_pgm: str, enrolled: dict):
-    """Single-capture match. Returns {'name', 'ncc', 'angle', 'matched', 'total'} or None."""
+def authenticate_fingerprint(query_pgm: str, template_path: str, clear_pgm: str = None):
+    """Match a query against a composite template (NCC + minutiae)."""
+    if not clear_pgm or not os.path.exists(clear_pgm):
+        print("ERROR: clear.pgm required")
+        return False
+
+    with open(template_path, 'rb') as f:
+        template = pickle.load(f)
+
     query_enh = bg_subtract(query_pgm, clear_pgm)
     if float(np.std(query_enh)) < 15:
-        return None
+        print("  Query too flat, rejecting")
+        return False
 
-    _, _, _, query_min = fp.process_raw(query_pgm)
+    _, _, _, query_mins = fp.process_raw(query_pgm)
+    print(f"  Query: {query_enh.shape}, {len(query_mins)} minutiae")
 
-    best = None
-    for name, data in enrolled.items():
-        timg = data['enhanced']
-        ncc, angle, dx, dy = best_alignment(timg, query_enh)
-        if best is None or ncc > best['ncc']:
-            best = {'name': name, 'ncc': ncc, 'angle': angle,
-                    'dx': dx, 'dy': dy, 'qmin': query_min,
-                    'tmin': data['minutiae']}
+    # NCC against mosaic
+    ncc, angle, dx, dy = best_align(template['mosaic'], query_enh)
+    print(f"  vs mosaic: ncc={ncc:.3f}, rot={angle}°, dx={dx}, dy={dy}")
 
-    if best is None or best['ncc'] < 0.15:
-        return None
+    # Minutiae matching
+    tmins = template['minutiae']
+    tpts = np.array([(x, y) for x, y, *_ in tmins], dtype=np.float32)
+    tang = np.array([a for *_, a, _ in tmins], dtype=np.float32)
+    qpts = np.array([(x, y) for x, y, *_ in query_mins], dtype=np.float32)
+    qang = np.array([a for *_, a, _ in query_mins], dtype=np.float32)
 
-    # Minutiae verification
-    tpts = np.array([(x, y) for x, y, *_ in best['tmin']], dtype=np.float32)
-    tang = np.array([a for *_, a, _ in best['tmin']], dtype=np.float32)
-    qpts = np.array([(x, y) for x, y, *_ in best['qmin']], dtype=np.float32)
-    qang = np.array([a for *_, a, _ in best['qmin']], dtype=np.float32)
-
-    rad = np.radians(best['angle'])
+    rad = np.radians(angle)
     ca, sa = np.cos(rad), np.sin(rad)
-    q_aligned = np.column_stack([
-        qpts[:, 0] * ca - qpts[:, 1] * sa + best['dx'],
-        qpts[:, 0] * sa + qpts[:, 1] * ca + best['dy']
-    ])
-    q_ang_aligned = qang + best['angle']
+    q_aligned = qpts @ np.array([[ca, -sa], [sa, ca]]) + np.array([dx, dy])
+    q_ang_aligned = qang + angle
 
     matched = 0
     for qi in range(len(q_aligned)):
         for ti in range(len(tpts)):
-            d = np.linalg.norm(q_aligned[qi] - tpts[ti])
-            if d < 8:
+            if np.linalg.norm(q_aligned[qi] - tpts[ti]) < 8:
                 da = abs(q_ang_aligned[qi] - tang[ti])
-                da = min(da, 360 - da)
-                if da < 30:
+                if min(da, 360 - da) < 30:
                     matched += 1
                     break
 
-    best['matched'] = matched
-    best['total'] = min(len(qpts), len(tpts))
-    return best
+    ncc_ok = ncc >= 0.20
+    min_ok = matched >= max(6, len(tpts) * 0.12)
 
-
-def authenticate_fingerprint(query_pgm: str, template_path: str, clear_pgm: str = None,
-                              n_captures: int = 3):
-    """Multi-capture authentication.
-
-    Takes n_captures, compares each against templates.
-    Requires >= 2/3 captures to pass both NCC and minutiae thresholds.
-    This nearly eliminates false accepts while maintaining high true accept rate.
-    """
-    if clear_pgm is None or not os.path.exists(clear_pgm):
-        print("ERROR: clear.pgm required for background subtraction")
-        return False
-
-    with open(template_path, 'rb') as f:
-        enrolled = pickle.load(f)
-
-    results = _match_templates(query_pgm, clear_pgm, enrolled)
-
-    if results is None:
-        print(f"  No match (ncc too low or flat image)")
-        return False
-
-    ncc_ok = results['ncc'] >= 0.22
-    min_ok = results['matched'] >= max(6, results['total'] * 0.55)
-
-    print(f"  {results['name']}: ncc={results['ncc']:.3f} "
-          f"(ok={ncc_ok}), minutiae={results['matched']}/{results['total']} "
-          f"(ok={min_ok})")
+    print(f"  Matched minutiae: {matched}/{len(tpts)} (need >= {max(6, len(tpts) * 0.12):.0f})")
+    print(f"  NCC ok={ncc_ok}, Minutiae ok={min_ok}")
 
     return ncc_ok and min_ok

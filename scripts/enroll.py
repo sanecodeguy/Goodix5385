@@ -25,23 +25,20 @@ def main():
     clear_src = "clear.pgm"
     clear_dst = os.path.join(args.outdir, "clear.pgm")
     shutil.copy2(clear_src, clear_dst)
-    print(f"Copied {clear_src} to {args.outdir}/")
 
-    print(f"\nWill capture {args.count} fingerprints at different angles.")
-    print("  Angles: center, slight-left, slight-right, slight-up, slight-down, rotated\n")
-
+    print(f"\nCapturing {args.count} fingerprints...")
     for i in range(args.count):
-        input(f"Capture {i+1}/{args.count} - Place finger and press Enter...")
+        input(f"  Capture {i+1}/{args.count} — Place finger and press Enter...")
         raw_path = os.path.join(args.outdir, f"raw_{i}.pgm")
         driver.capture_fingerprint(device, calib_params, raw_path)
-        print(f"  Saved: {raw_path}")
+        print(f"    Saved: {raw_path}")
 
-    print("\nComputing fingerprint templates...")
+    print("\nBuilding composite template...")
     template_path = matcher.enroll_fingerprints(args.outdir, clear_pgm=clear_dst)
     if template_path is None:
-        print("Enrollment FAILED - no valid captures.")
+        print("Enrollment FAILED")
         sys.exit(1)
-    print(f"\nEnrollment complete! Templates saved to: {template_path}")
+    print(f"\nEnrollment complete! Composite template: {template_path}")
 
 
 if __name__ == "__main__":
