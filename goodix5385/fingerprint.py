@@ -142,7 +142,7 @@ def skeletonize(binary):
 
 # ─── Stage 6: Minutiae extraction ────────────────────────────────────────────
 
-def extract_minutiae(skeleton, min_dist=6, border=4):
+def extract_minutiae(skeleton, min_dist=16, border=6):
     """Crossing-number minutiae extraction with post-processing."""
     h, w = skeleton.shape
     cn_map = np.zeros((h, w), dtype=np.int32)

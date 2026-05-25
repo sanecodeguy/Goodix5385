@@ -43,7 +43,7 @@ def bg_subtract_and_extract(finger_path: str, clear_path: str):
     gabor = fp.gabor_enhance(clahe_img, orient, coh)
     binary = fp.binarize(gabor, block_size=17, c=4)
     skeleton = fp.skeletonize(binary)
-    minutiae = fp.extract_minutiae(skeleton, min_dist=8, border=5)
+    minutiae = fp.extract_minutiae(skeleton, min_dist=16, border=6)
 
     return ncc_img, minutiae
 
@@ -232,14 +232,16 @@ def authenticate_fingerprint(query_pgm: str, template_path: str, clear_pgm: str 
     matched = 0
     for qi in range(len(q_aligned)):
         for ti in range(len(tpts)):
-            if np.linalg.norm(q_aligned[qi] - tpts[ti]) < 8:
+            if np.linalg.norm(q_aligned[qi] - tpts[ti]) < 6:
                 da = abs(q_ang_aligned[qi] - tang[ti])
-                if min(da, 360 - da) < 30:
+                if min(da, 360 - da) < 20:
                     matched += 1
                     break
 
     ncc_ok = ncc >= 0.20
-    min_ok = matched >= max(6, len(tpts) * 0.12)
+    min_count = len(tpts)
+    min_frac = 0.20
+    min_ok = matched >= max(3, min_count * min_frac)
 
     print(f"  Matched minutiae: {matched}/{len(tpts)} (need >= {max(6, len(tpts) * 0.12):.0f})")
     print(f"  NCC ok={ncc_ok}, Minutiae ok={min_ok}")
