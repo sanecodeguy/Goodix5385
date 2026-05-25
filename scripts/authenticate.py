@@ -24,11 +24,12 @@ def main():
     device, calib_params = driver.initialize_device()
 
     raw_path = "/tmp/auth_raw.pgm"
+    clear_path = os.path.join(args.templates, "clear.pgm")
 
     print("\nPlace your finger on the sensor for authentication...")
     driver.capture_fingerprint(device, calib_params, raw_path)
 
-    result = matcher.authenticate_fingerprint(raw_path, template_path)
+    result = matcher.authenticate_fingerprint(raw_path, template_path, clear_pgm=clear_path)
 
     if result:
         print("\nAUTHENTICATION SUCCESSFUL - Fingerprint matched!")

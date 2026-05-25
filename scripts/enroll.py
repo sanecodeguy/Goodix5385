@@ -22,6 +22,11 @@ def main():
     print("Initializing Goodix 5385 sensor...")
     device, calib_params = driver.initialize_device()
 
+    clear_src = "clear.pgm"
+    clear_dst = os.path.join(args.outdir, "clear.pgm")
+    shutil.copy2(clear_src, clear_dst)
+    print(f"Copied {clear_src} to {args.outdir}/")
+
     print(f"\nWill capture {args.count} fingerprints at different angles.")
     print("  Angles: center, slight-left, slight-right, slight-up, slight-down, rotated\n")
 
@@ -32,7 +37,7 @@ def main():
         print(f"  Saved: {raw_path}")
 
     print("\nComputing fingerprint templates...")
-    template_path = matcher.enroll_fingerprints(args.outdir)
+    template_path = matcher.enroll_fingerprints(args.outdir, clear_pgm=clear_dst)
     if template_path is None:
         print("Enrollment FAILED - no valid captures.")
         sys.exit(1)

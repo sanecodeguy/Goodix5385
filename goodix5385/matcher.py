@@ -17,29 +17,44 @@ from . import fingerprint as fp
 # ─── Image enhancement ───────────────────────────────────────────────────────
 
 def enhance_raw(pgm_path: str):
-    """Read raw PGM, crop border, high-pass filter to remove background, CLAHE.
+    """Read raw PGM, crop border, normalize to 8-bit.
 
-    Uses large Gaussian blur to estimate background instead of clear.pgm,
-    making it invariant to sensor calibration changes between sessions.
+    For matching we use session-local background subtraction separately
+    (clear subtracted from finger image within each session).
     """
     width, height, depth, pixels = tool.read_pgm(pgm_path)
     img = np.array(pixels, dtype=np.uint16).reshape(height, width)
     img = img[1:height - 1, 1:width - 1]
-    img_f = np.float32(img)
+    img_8u = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    return img_8u
 
-    bg = cv2.GaussianBlur(img_f, (25, 25), 0)
-    hp = img_f - bg
-    hp = hp - np.min(hp)
 
-    if np.max(hp) > 0:
-        hp = hp / np.max(hp) * 255.0
-    hp = np.clip(hp, 0, 255).astype(np.uint8)
+def bg_subtract(finger_path: str, clear_path: str):
+    """Subtract clear from finger image within same session.
 
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(hp)
+    This removes the sensor's baseline pattern (which changes each init).
+    Result should be the same fingerprint signal regardless of the baseline.
+    """
+    wf, hf, _, fpixels = tool.read_pgm(finger_path)
+    wc, hc, _, cpixels = tool.read_pgm(clear_path)
+    assert wf == wc and hf == hc
 
-    blurred = cv2.GaussianBlur(enhanced, (3, 3), 0.5)
-    return blurred
+    finger = np.array(fpixels, dtype=np.int32).reshape(hf, wf)
+    clear = np.array(cpixels, dtype=np.int32).reshape(hc, wc)
+
+    # clear - finger: ridges are darker (lower capacitance)
+    diff = clear - finger
+    diff = diff + 2048
+    diff = np.clip(diff, 0, 4095).astype(np.uint16)
+
+    # crop border
+    diff = diff[1:hf - 1, 1:wf - 1]
+    img_8u = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+    clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
+    enhanced = clahe.apply(img_8u)
+
+    return enhanced
 
 
 # ─── Phase correlation alignment ────────────────────────────────────────────
@@ -135,12 +150,20 @@ def apply_transform(query, angle, dx, dy, size):
 
 # ─── Template management ────────────────────────────────────────────────────
 
-def enroll_fingerprints(processed_dir: str, output_template: str = "templates.pkl"):
+def enroll_fingerprints(processed_dir: str, output_template: str = "templates.pkl",
+                        clear_pgm: str = None):
     """Enroll fingerprints from raw PGM files in a directory.
 
-    Stores both enhanced image and minutiae for two-stage matching.
+    Uses background subtraction with the session's clear.pgm to remove
+    the sensor baseline. Stores enhanced image + minutiae for matching.
     """
     templates = {}
+
+    if clear_pgm is None:
+        clear_pgm = os.path.join(processed_dir, "clear.pgm")
+    if not os.path.exists(clear_pgm):
+        print("ERROR: clear.pgm not found. Run sensor init first.")
+        return None
 
     for fname in sorted(os.listdir(processed_dir)):
         if not fname.startswith("raw_") or not fname.endswith(".pgm"):
@@ -148,7 +171,7 @@ def enroll_fingerprints(processed_dir: str, output_template: str = "templates.pk
         path = os.path.join(processed_dir, fname)
         print(f"  Processing {fname}...")
 
-        enhanced = enhance_raw(path)
+        enhanced = bg_subtract(path, clear_pgm)
         _, _, _, minutiae = fp.process_raw(path)
 
         if len(minutiae) < 5:
@@ -172,9 +195,17 @@ def enroll_fingerprints(processed_dir: str, output_template: str = "templates.pk
     return template_path
 
 
-def authenticate_fingerprint(query_pgm: str, template_path: str, _clear_pgm: str = None):
-    """Two-stage authentication with brute-force rotation search + NCC + minutiae."""
-    query_enh = enhance_raw(query_pgm)
+def authenticate_fingerprint(query_pgm: str, template_path: str, clear_pgm: str = None):
+    """Two-stage authentication with background subtraction.
+
+    Uses the session's own clear.pgm for background subtraction, making it
+    invariant to sensor baseline changes between init sessions.
+    """
+    if clear_pgm is None or not os.path.exists(clear_pgm):
+        print("ERROR: clear.pgm required for background subtraction")
+        return False
+
+    query_enh = bg_subtract(query_pgm, clear_pgm)
     if float(np.std(query_enh)) < 15:
         print(f"  Query too flat, rejecting")
         return False
@@ -203,7 +234,7 @@ def authenticate_fingerprint(query_pgm: str, template_path: str, _clear_pgm: str
         print(f"  NCC too low (< {ncc_threshold}), rejecting")
         return False
 
-    # Stage 2: Minutiae verification (apply same rotation/translation)
+    # Stage 2: Minutiae verification
     best_data = enrolled[best['name']]
     tpts = np.array([(x, y) for x, y, *_ in best_data['minutiae']], dtype=np.float32)
     tang = np.array([a for *_, a, _ in best_data['minutiae']], dtype=np.float32)
