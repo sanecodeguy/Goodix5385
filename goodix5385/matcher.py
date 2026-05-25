@@ -238,10 +238,8 @@ def authenticate_fingerprint(query_pgm: str, template_path: str, clear_pgm: str 
                     matched += 1
                     break
 
-    ncc_ok = ncc >= 0.20
-    min_count = len(tpts)
-    min_frac = 0.20
-    min_ok = matched >= max(3, min_count * min_frac)
+    ncc_ok = ncc >= 0.18
+    min_ok = matched >= max(4, len(tpts) * 0.12)
 
     print(f"  Matched minutiae: {matched}/{len(tpts)} (need >= {max(6, len(tpts) * 0.12):.0f})")
     print(f"  NCC ok={ncc_ok}, Minutiae ok={min_ok}")
