@@ -14,21 +14,38 @@ from . import tool
 from . import fingerprint as fp
 
 
-# ─── Background subtraction ─────────────────────────────────────────────────
+# ─── Background subtraction + unified minutiae extraction ───────────────────
 
-def bg_subtract(finger_path: str, clear_path: str):
-    """Subtract clear from finger within same session, crop, CLAHE."""
+def bg_subtract_and_extract(finger_path: str, clear_path: str):
+    """Unified pipeline: bg_subtract → enhance → NCC image + minutiae.
+
+    1. Session-local background subtraction (clear - finger)
+    2. CLAHE for contrast
+    3. Gabor filter for ridge enhancement (same as fingerprint module)
+    4. Binarize → skeletonize → minutiae extraction
+    5. Returns (ncc_image, minutiae_list)
+    """
     wf, hf, _, fpix = tool.read_pgm(finger_path)
     wc, hc, _, cpix = tool.read_pgm(clear_path)
     assert wf == wc and hf == hc
+
     finger = np.array(fpix, dtype=np.int32).reshape(hf, wf)
     clear = np.array(cpix, dtype=np.int32).reshape(hc, wc)
     diff = clear - finger + 2048
     diff = np.clip(diff, 0, 4095).astype(np.uint16)
     diff = diff[1:hf - 1, 1:wf - 1]
     img_8u = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
-    return clahe.apply(img_8u)
+    clahe_img = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8)).apply(img_8u)
+
+    ncc_img = clahe_img.copy()
+
+    orient, coh = fp.orientation_field(clahe_img, block_size=7, smooth_sigma=2.0)
+    gabor = fp.gabor_enhance(clahe_img, orient, coh)
+    binary = fp.binarize(gabor, block_size=17, c=4)
+    skeleton = fp.skeletonize(binary)
+    minutiae = fp.extract_minutiae(skeleton, min_dist=8, border=5)
+
+    return ncc_img, minutiae
 
 
 # ─── Alignment ──────────────────────────────────────────────────────────────
@@ -145,8 +162,7 @@ def enroll_fingerprints(processed_dir: str, output_template: str = "templates.pk
 
     for fname in raws:
         path = os.path.join(processed_dir, fname)
-        enhanced = bg_subtract(path, clear_pgm)
-        _, _, _, mins = fp.process_raw(path)
+        enhanced, mins = bg_subtract_and_extract(path, clear_pgm)
         images.append(enhanced)
         minutiae_list.append(mins)
         print(f"  {fname}: enhanced={enhanced.shape}, {len(mins)} minutiae")
@@ -190,12 +206,11 @@ def authenticate_fingerprint(query_pgm: str, template_path: str, clear_pgm: str 
     with open(template_path, 'rb') as f:
         template = pickle.load(f)
 
-    query_enh = bg_subtract(query_pgm, clear_pgm)
+    query_enh, query_mins = bg_subtract_and_extract(query_pgm, clear_pgm)
     if float(np.std(query_enh)) < 15:
         print("  Query too flat, rejecting")
         return False
 
-    _, _, _, query_mins = fp.process_raw(query_pgm)
     print(f"  Query: {query_enh.shape}, {len(query_mins)} minutiae")
 
     # NCC against mosaic
