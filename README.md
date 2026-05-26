@@ -1,77 +1,79 @@
-# Goodix5385
+# Goodix5385 — Fingerprint Driver & GUI for Linux
 
-Goodix 5385 fingerprint sensor driver for Dell XPS 13 9380 (Arch Linux).
+Full solution for Goodix 5385 (`27c6:5385`) fingerprint sensor on Linux, featuring a libfprint driver and a Qt/QML GUI for enrollment.
 
-Reverse-engineered from [goodix-fp-dump](https://github.com/goodix-fp-linux-dev/goodix-fp-dump)
-with SIGFM fingerprint matching.
+## Features
 
-## Architecture
-
-- **Python driver** — USB communication, GTLS handshake, image capture
-- **C++ SIGFM** — SIFT-based fingerprint matching (enrollment + authentication)
+- **libfprint driver** — GTLS protocol, SIGFM matching, 108×88 capacitive sensor
+- **USB reset service** — Fixes "transfer timed out" bad-state issue automatically at boot
+- **Qt/QML GUI** — Floating overlay like Windows fingerprint enrollment
+- **PAM integration** — Use fingerprint for `sudo` and system auth
 
 ## Quick Start
 
-### Install dependencies
+### Prerequisites
+
 ```bash
-pip install -r requirements.txt
+# Install dependencies
+sudo pacman -S python-pyside6 python-dbus pyusb
+# Or on Debian: sudo apt install python3-pyside6 python3-dbus python3-usb
 ```
 
-### Build SIGFM
-```bash
-make sigfm
-```
-Requires OpenCV 4 with `opencv_contrib` (for SIFT).
+### Install
 
-### Capture a fingerprint
 ```bash
-python -m goodix5385.cli capture -o test.pgm
+# Install the Python package and system integration
+sudo ./install.sh
 ```
 
-### Enroll fingerprints (multi-angle)
+### Use
+
 ```bash
-python scripts/enroll.py --outdir enrolled --count 6
+# Launch the GUI (system tray app)
+python3 -m goodix5385.gui
+
+# Or enroll via CLI
+python3 -m goodix5385.scripts.enroll
 ```
 
-### Authenticate
-```bash
-python scripts/authenticate.py --templates enrolled
-```
+## GUI (Qt/QML)
 
-## Hardware
+The GUI runs as a system tray application. Click the tray icon to:
+- **Enroll Fingerprint** — Select finger → guided 8-scan enrollment with visual feedback
+- **Verify Fingerprint** — Quick match test
 
-| Attribute | Value |
-|-----------|-------|
-| Vendor  | 0x27c6 |
-| Product | 0x5385 |
-| Sensor  | GF5288_HTSEC |
-| Resolution | 108 x 88 |
-| Firmware | GF5288_HTSEC_APP_10011 |
+The floating overlay shows fingerprint animation, scan progress dots, and clear status messages.
 
-## PAM Integration
+## USB Reset Fix
+
+The sensor sometimes enters a bad state after suspend/resume. The included systemd service (`goodix-usb-reset.service`) resets the USB device before fprintd starts.
+
+## PAM Setup
 
 ```bash
-# After enrollment, add to /etc/pam.d/sudo:
-auth sufficient pam_exec.so /usr/local/bin/pam_goodix5385.py
+# Add to /etc/pam.d/sudo:
+# auth       sufficient   pam_fprintd.so
+# auth       include      system-auth
 ```
 
 ## Project Structure
 
 ```
-Goodix5385/
-├── goodix5385/        # Python driver package
-│   ├── protocol.py    # USB communication
-│   ├── wrapless.py    # Goodix wrapless protocol + GTLS
-│   ├── driver.py      # 5385 sensor driver
-│   ├── tool.py        # Image decode/PGM
-│   ├── preprocessor.py# Image preprocessing
-│   └── config.py      # Constants
-├── sigfm/             # C++ fingerprint matcher
-│   ├── compute.cpp    # Enrollment (feature extraction)
-│   ├── match.cpp      # Authentication (matching)
-│   └── structs.hpp    # Shared types
-├── scripts/           # CLI tools
-├── pam/               # PAM module
-├── udev/              # udev rules
-└── systemd/           # systemd service
+goodix5385/
+├── drivers/goodix53x5/    # libfprint C driver source
+├── sigfm/                 # SIGFM fingerprint matcher (C++)
+├── gui/                   # Qt/QML Python GUI
+│   ├── main.py           # Application entry point
+│   ├── fprintd_dbus.py   # D-Bus fprintd backend
+│   └── qml/              # QML UI components
+├── scripts/               # USB reset, CLI enrollment
+├── udev/                  # udev rules
+├── systemd/               # systemd services
+└── install.sh             # Automated installer
 ```
+
+## Credits
+
+- libfprint driver: [AndyHazz/goodix53x5-libfprint](https://github.com/AndyHazz/goodix53x5-libfprint)
+- Original Python driver: [sanecodeguy/Goodix5385](https://github.com/sanecodeguy/Goodix5385)
+- SIGFM: [goodix-fp-linux-dev/sigfm](https://github.com/goodix-fp-linux-dev/sigfm)

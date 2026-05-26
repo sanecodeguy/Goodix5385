@@ -1,0 +1,12 @@
+[Unit]
+Description=Goodix 5385 Fingerprint Sensor USB Reset
+Before=fprintd.service
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/goodix5385/scripts/usb-reset.py
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

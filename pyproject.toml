@@ -1,8 +1,28 @@
-[package]
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
 name = "goodix5385"
-version = "0.1.0"
-description = "Goodix 5385 Fingerprint Driver for Dell XPS 13 9380"
-authors = ["sanecodeguy"]
+version = "0.2.0"
+description = "Goodix 5385 Fingerprint Driver & GUI for Linux"
+authors = [
+    {name = "sanecodeguy"},
+]
+dependencies = [
+    "PySide6>=6.6",
+    "dbus-python>=1.3",
+    "pyusb>=1.2",
+]
+
+[project.scripts]
+goodix5385-enroll = "goodix5385.scripts.enroll:main"
+goodix5385-gui = "goodix5385.gui.main:main"
+goodix5385-usb-reset = "goodix5385.scripts.usb_reset:main"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+packages = ["goodix5385", "goodix5385.gui", "goodix5385.scripts"]
 
 [tool.setuptools.packages.find]
 include = ["goodix5385*"]

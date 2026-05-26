@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Goodix5385 Fingerprint Enrollment GUI — Qt/QML frontend for fprintd."""
+
+import os
+import sys
+
+from PySide6.QtCore import QObject, Slot
+from PySide6.QtGui import QIcon, QAction
+from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+
+from .fprintd_dbus import FprintdBackend
+
+QML_DIR = os.path.join(os.path.dirname(__file__), "qml")
+
+
+class FprintBridge(QObject):
+    def __init__(self, backend: FprintdBackend, engine: QQmlApplicationEngine, parent=None):
+        super().__init__(parent)
+        self._backend = backend
+        self._engine = engine
+        self._root = None
+
+        backend.enrolled.connect(self._on_enrolled)
+        backend.stagePassed.connect(self._on_stage_passed)
+        backend.retryScan.connect(self._on_retry)
+        backend.error.connect(self._on_error)
+        backend.verifyResult.connect(self._on_verify_result)
+        backend.deviceFound.connect(self._on_device_found)
+
+    def _get_root(self):
+        if self._root is None:
+            objs = self._engine.rootObjects()
+            if objs:
+                self._root = objs[0]
+        return self._root
+
+    def _get_overlay(self):
+        root = self._get_root()
+        if root:
+            return root.findChild(QObject, "overlay")
+        return None
+
+    def _on_enrolled(self):
+        overlay = self._get_overlay()
+        if overlay:
+            overlay.setProperty("success", True)
+            overlay.setProperty("status", "Enrollment complete!")
+
+    def _on_stage_passed(self):
+        overlay = self._get_overlay()
+        if overlay:
+            overlay.setProperty("scanCount", overlay.property("scanCount") + 1)
+            overlay.setProperty("status", "Fingerprint captured — lift and press again")
+
+    def _on_retry(self, msg: str):
+        overlay = self._get_overlay()
+        if overlay:
+            overlay.setProperty("status", msg)
+
+    def _on_device_found(self, found: bool):
+        root = self._get_root()
+        if root:
+            root.setProperty("deviceAvailable", found)
+            root.setProperty("statusMessage", "Device ready" if found else "No fingerprint device found")
+
+    def _on_error(self, msg: str):
+        overlay = self._get_overlay()
+        if overlay:
+            overlay.setProperty("status", f"Error: {msg}")
+
+    def _on_verify_result(self, matched: bool):
+        overlay = self._get_overlay()
+        if overlay:
+            if matched:
+                overlay.setProperty("success", True)
+                overlay.setProperty("status", "Verified!")
+            else:
+                overlay.setProperty("status", "Not recognized — try again")
+
+    @Slot(str)
+    def on_enroll(self, finger: str):
+        self._backend.start_enroll(finger)
+
+    @Slot()
+    def on_verify(self):
+        self._backend.start_verify()
+
+    @Slot()
+    def on_stop(self):
+        self._backend.stop_current()
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("Goodix5385 Fingerprint")
+    app.setQuitOnLastWindowClosed(False)
+
+    backend = FprintdBackend()
+    engine = QQmlApplicationEngine()
+
+    bridge = FprintBridge(backend, engine)
+    engine.rootContext().setContextProperty("fprintBridge", bridge)
+
+    qml_path = os.path.join(QML_DIR, "main.qml")
+    engine.load(qml_path)
+
+    if not engine.rootObjects():
+        print("Failed to load QML", file=sys.stderr)
+        return 1
+
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
