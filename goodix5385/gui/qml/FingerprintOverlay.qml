@@ -16,10 +16,29 @@ Window {
     property int scanCount: 0
     property bool retryMode: false
 
+    property int restX: 0
+
+    onRetryModeChanged: {
+        if (retryMode) shakeAnim.start()
+    }
+
     signal startEnroll(string finger)
     signal startVerify()
     signal cancel()
     signal retry()
+
+    SequentialAnimation {
+        id: shakeAnim
+        loops: 1
+        PropertyAction { target: overlay; property: "restX"; value: overlay.x }
+        NumberAnimation { target: overlay; property: "x"; to: overlay.restX - 8; duration: 40 }
+        NumberAnimation { target: overlay; property: "x"; to: overlay.restX + 8; duration: 40 }
+        NumberAnimation { target: overlay; property: "x"; to: overlay.restX - 6; duration: 40 }
+        NumberAnimation { target: overlay; property: "x"; to: overlay.restX + 6; duration: 40 }
+        NumberAnimation { target: overlay; property: "x"; to: overlay.restX - 3; duration: 40 }
+        NumberAnimation { target: overlay; property: "x"; to: overlay.restX + 3; duration: 40 }
+        NumberAnimation { target: overlay; property: "x"; to: overlay.restX; duration: 40 }
+    }
 
     Rectangle {
         anchors.centerIn: parent
