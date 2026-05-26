@@ -140,7 +140,8 @@ def main():
     def on_enroll_click():
         dlg = root_win.findChild(QObject, "fingerDialog")
         if dlg:
-            dlg.open()
+            dlg.setProperty("visible", True)
+            dlg.setProperty("selectedFinger", "right-index-finger")
     enroll_action.triggered.connect(on_enroll_click)
 
     def on_verify_click():
@@ -152,7 +153,7 @@ def main():
             overlay.setProperty("success", False)
             overlay.setProperty("status", "Place your finger on the sensor")
             overlay.setProperty("scanCount", 0)
-            overlay.show()
+            overlay.setProperty("visible", True)
     verify_action.triggered.connect(on_verify_click)
 
     quit_action.triggered.connect(app.quit)
