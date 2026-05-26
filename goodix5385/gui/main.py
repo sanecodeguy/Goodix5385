@@ -60,7 +60,12 @@ class FprintBridge(QObject):
     def _on_retry(self, msg: str):
         overlay = self._get_overlay()
         if overlay:
-            overlay.setProperty("retryMode", False)
+            is_enrolling = overlay.property("isEnrolling")
+            if is_enrolling:
+                overlay.setProperty("retryMode", False)
+            else:
+                overlay.setProperty("retryMode", True)
+                overlay.setProperty("scanCount", 0)
             overlay.setProperty("status", msg)
 
     def _on_device_found(self, found: bool):
