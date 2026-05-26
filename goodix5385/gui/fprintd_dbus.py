@@ -1,18 +1,9 @@
-"""D-Bus interface to fprintd for fingerprint operations.
-Uses dbus-python (GLib main loop) with Qt signals for QML integration.
-"""
+"""Backend for fingerprint operations using fprintd CLI tools via subprocess."""
 
-import dbus
-import dbus.mainloop.glib
+import subprocess
+import threading
 
 from PySide6.QtCore import QObject, Signal, Slot
-from gi.repository import GLib
-
-FPF_BUS = "net.reactivated.Fprint"
-FPF_MANAGER_PATH = "/net/reactivated/Fprint/Manager"
-FPF_MANAGER_IFACE = "net.reactivated.Fprint.Manager"
-FPF_DEVICE_PATH = "/net/reactivated/Fprint/Device/0"
-FPF_DEVICE_IFACE = "net.reactivated.Fprint.Device"
 
 
 class FprintdBackend(QObject):
@@ -25,81 +16,111 @@ class FprintdBackend(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-        self._bus = dbus.SystemBus()
-        self._device = None
-        self._loop = None
+        self._stop = False
+        self._verify_result = False
 
     def _find_device(self):
         try:
-            manager = self._bus.get_object(
-                FPF_BUS, FPF_MANAGER_PATH
+            result = subprocess.run(
+                ["fprintd-list"],
+                capture_output=True, text=True, timeout=5
             )
-            mgr_iface = dbus.Interface(manager, FPF_MANAGER_IFACE)
-            devices = mgr_iface.GetDevices()
-            if not devices:
+            if "No devices" in result.stderr or "No devices" in result.stdout:
                 self.deviceFound.emit(False)
                 self.error.emit("No fingerprint devices found")
                 return False
-
-            path = devices[0]
-            self._device = self._bus.get_object(FPF_BUS, path)
-            self._device.connect_to_signal(
-                "EnrollStatus", self._on_enroll_status
-            )
-            self._device.connect_to_signal(
-                "VerifyStatus", self._on_verify_status
-            )
             self.deviceFound.emit(True)
             return True
-
-        except dbus.DBusException as e:
+        except FileNotFoundError:
             self.deviceFound.emit(False)
-            self.error.emit(f"fprintd error: {e}")
+            self.error.emit("fprintd not installed")
             return False
-
-    def _on_enroll_status(self, result, done):
-        if result == "enroll-stage-passed":
-            self.stagePassed.emit()
-        elif result == "enroll-retry-scan":
-            self.retryScan.emit("Lift and re-press your finger")
-        elif result in ("enroll-completed", "enroll-data-full"):
-            self.enrolled.emit()
-        elif result == "enroll-failed":
-            self.error.emit("Enrollment failed")
-        else:
-            self.error.emit(f"Unknown: {result}")
-
-    def _on_verify_status(self, result, done):
-        if result == "verify-match":
-            self.verifyResult.emit(True)
-        elif result == "verify-no-match":
-            self.retryScan.emit("Fingerprint not recognized")
-        elif result == "verify-retry-scan":
-            self.retryScan.emit("Lift and re-press your finger")
-        elif result == "verify-unknown":
-            self.error.emit("Verification error")
+        except subprocess.TimeoutExpired:
+            self.deviceFound.emit(False)
+            self.error.emit("fprintd not responding")
+            return False
 
     @Slot(str)
     def start_enroll(self, finger="right-index-finger"):
         if not self._find_device():
             return
-        iface = dbus.Interface(self._device, FPF_DEVICE_IFACE)
-        iface.EnrollStart(finger)
+
+        self._stop = False
+
+        def run():
+            try:
+                proc = subprocess.Popen(
+                    ["fprintd-enroll", "--finger", finger],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, bufsize=1
+                )
+                for line in proc.stdout:
+                    if self._stop:
+                        proc.terminate()
+                        return
+                    line = line.strip()
+                    if "Enroll result: enroll-stage-passed" in line:
+                        self.stagePassed.emit()
+                    elif "Enroll result: enroll-completed" in line:
+                        self.enrolled.emit()
+                        return
+                    elif "Enroll result: enroll-failed" in line:
+                        self.error.emit("Enrollment failed")
+                        return
+                    elif "Enroll result: enroll-retry-scan" in line:
+                        self.retryScan.emit("Lift and re-press your finger")
+                    elif "Enroll result: enroll-data-full" in line:
+                        self.enrolled.emit()
+                        return
+                    elif "failed" in line.lower() and "error" in line.lower():
+                        self.error.emit(line)
+                        return
+                proc.wait()
+            except Exception as e:
+                self.error.emit(str(e))
+
+        threading.Thread(target=run, daemon=True).start()
 
     @Slot(str)
     def start_verify(self, finger=""):
         if not self._find_device():
             return
-        iface = dbus.Interface(self._device, FPF_DEVICE_IFACE)
-        iface.VerifyStart(finger)
+
+        self._stop = False
+
+        def run():
+            try:
+                proc = subprocess.Popen(
+                    ["fprintd-verify"],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, bufsize=1
+                )
+                for line in proc.stdout:
+                    if self._stop:
+                        proc.terminate()
+                        return
+                    line = line.strip()
+                    if "verify-match" in line:
+                        self.verifyResult.emit(True)
+                        return
+                    elif "verify-no-match" in line:
+                        self.retryScan.emit("Fingerprint not recognized")
+                    elif "verify-retry-scan" in line:
+                        self.retryScan.emit("Lift and re-press your finger")
+                    elif "verify-unknown" in line:
+                        self.error.emit("Verification error")
+                        return
+                    elif "failed" in line.lower() and "error" in line.lower():
+                        self.error.emit(line)
+                        return
+                proc.wait()
+            except Exception as e:
+                self.error.emit(str(e))
+
+        threading.Thread(target=run, daemon=True).start()
 
     @Slot()
     def stop_current(self):
-        if self._device:
-            try:
-                iface = dbus.Interface(self._device, FPF_DEVICE_IFACE)
-                iface.EnrollStop()
-                iface.VerifyStop()
-            except Exception:
-                pass
+        self._stop = True
+        subprocess.run(["pkill", "-f", "fprintd-enroll"], capture_output=True)
+        subprocess.run(["pkill", "-f", "fprintd-verify"], capture_output=True)
