@@ -21,6 +21,11 @@ Window {
     onRetryModeChanged: {
         if (retryMode) shakeAnim.start()
     }
+    onStatusChanged: {
+        if (!isEnrolling && !success) {
+            flashAnim.start()
+        }
+    }
 
     signal startEnroll(string finger)
     signal startVerify()
@@ -38,6 +43,14 @@ Window {
         NumberAnimation { target: overlay; property: "x"; to: overlay.restX - 3; duration: 40 }
         NumberAnimation { target: overlay; property: "x"; to: overlay.restX + 3; duration: 40 }
         NumberAnimation { target: overlay; property: "x"; to: overlay.restX; duration: 40 }
+    }
+
+    SequentialAnimation {
+        id: flashAnim
+        loops: 1
+        ScriptAction { script: iconFrame.flash = true }
+        PauseAnimation { duration: 150 }
+        ScriptAction { script: iconFrame.flash = false }
     }
 
     Rectangle {
@@ -63,11 +76,14 @@ Window {
                 height: 160
                 radius: 80
                 color: "#181825"
-                border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#313244"))
-                border.width: 2
+
+                property bool flash: false
+                property color baseColor: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#313244"))
+                border.color: flash ? "#cdd6f4" : baseColor
+                border.width: flash ? 4 : 2
 
                 Behavior on border.color {
-                    ColorAnimation { duration: 300 }
+                    ColorAnimation { duration: 80 }
                 }
 
                 Item {
@@ -82,7 +98,7 @@ Window {
                         height: 60
                         radius: 25
                         color: "transparent"
-                        border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#6c7086"))
+                        border.color: iconFrame.baseColor
                         border.width: 3
                     }
 
@@ -93,7 +109,7 @@ Window {
                         height: 18
                         radius: 15
                         color: "transparent"
-                        border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#6c7086"))
+                        border.color: iconFrame.baseColor
                         border.width: 2
                     }
 
@@ -103,7 +119,7 @@ Window {
                         width: 14
                         height: 14
                         radius: 7
-                        color: overlay.success ? "#a6e3a1" : "#89b4fa"
+                        color: "#89b4fa"
                         opacity: 0.15
                         visible: overlay.scanCount > 0
                     }
@@ -184,8 +200,6 @@ Window {
                     text: parent.text
                     color: overlay.success ? "#a6e3a1" : (overlay.retryMode ? "#f9e2af" : "#f38ba8")
                     font.pixelSize: 13
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
                     color: parent.hovered ? "#1e2a1e" : "transparent"
