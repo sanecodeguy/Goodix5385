@@ -136,14 +136,26 @@ def main():
         print("Failed to load QML UI", file=sys.stderr)
         return 1
 
-    # Connect tray menu actions to QML signals
-    enroll_action.triggered.connect(
-        lambda: root_win.findChild(QObject, "fingerDialog").open()
-        if root_win.findChild(QObject, "fingerDialog") else None
-    )
-    verify_action.triggered.connect(lambda: bridge.on_verify() or (
-        setattr(bridge, '_verify_overlay_shown', False) if hasattr(bridge, '_verify_overlay_shown') else None
-    ))
+    # Connect tray menu actions
+    def on_enroll_click():
+        dlg = root_win.findChild(QObject, "fingerDialog")
+        if dlg:
+            dlg.open()
+    enroll_action.triggered.connect(on_enroll_click)
+
+    def on_verify_click():
+        bridge.on_verify()
+        overlay = bridge._get_overlay()
+        if overlay:
+            overlay.setProperty("isEnrolling", False)
+            overlay.setProperty("fingerName", "")
+            overlay.setProperty("success", False)
+            overlay.setProperty("status", "Place your finger on the sensor")
+            overlay.setProperty("scanCount", 0)
+            overlay.show()
+    verify_action.triggered.connect(on_verify_click)
+
+    quit_action.triggered.connect(app.quit)
 
     tray.show()
 

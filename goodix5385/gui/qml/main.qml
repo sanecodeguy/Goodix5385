@@ -20,6 +20,7 @@ ApplicationWindow {
 
     Dialog {
         id: fingerDialog
+        objectName: "fingerDialog"
         title: "Select Finger"
         standardButtons: Dialog.Ok | Dialog.Cancel
         modal: true
@@ -68,14 +69,18 @@ ApplicationWindow {
                             leftPadding: 8
                         }
                         indicator: Rectangle {
+                            id: ind
+                            x: 0
+                            y: (parent.height - height) / 2
                             width: 16; height: 16; radius: 8
-                            border.color: parent.checked ? "#89b4fa" : "#6c7086"
+                            color: "transparent"
+                            border.color: ind.parent.checked ? "#89b4fa" : "#6c7086"
                             border.width: 2
                             Rectangle {
+                                anchors.centerIn: parent
                                 width: 8; height: 8; radius: 4
                                 color: "#89b4fa"
-                                visible: parent.checked
-                                anchors.centerIn: parent
+                                visible: ind.parent.checked
                             }
                         }
                     }
@@ -155,14 +160,24 @@ ApplicationWindow {
             root.requestEnroll(selectedFinger)
             overlay.show()
         }
+        onRejected: {
+            overlay.hide()
+        }
     }
 
     FingerprintOverlay {
-        id: overlay
+        objectName: "overlay"
         onCancel: {
             root.requestStop()
             overlay.hide()
         }
+    }
+
+    Connections {
+        target: root
+        function onRequestEnroll(finger) { fprintBridge.on_enroll(finger) }
+        function onRequestVerify() { fprintBridge.on_verify() }
+        function onRequestStop() { fprintBridge.on_stop() }
     }
 
     Shortcut {

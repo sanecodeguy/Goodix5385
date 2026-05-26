@@ -10,7 +10,8 @@ echo "==> Installing Goodix5385 Fingerprint Driver & GUI..."
 
 # Install Python package
 echo "  -> Installing Python package..."
-"${PYTHON}" -m pip install -e . 2>/dev/null || "${PYTHON}" -m pip install .
+PIP_OPTS="--break-system-packages"
+"${PYTHON}" -m pip install -e . $PIP_OPTS 2>/dev/null || "${PYTHON}" -m pip install . $PIP_OPTS 2>/dev/null || echo "  (skip pip — running directly via python3 -m goodix5385)"
 
 # Install USB reset script
 echo "  -> Installing USB reset script..."
