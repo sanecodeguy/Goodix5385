@@ -215,11 +215,8 @@ ApplicationWindow {
             overlay.hide()
         }
         onRetry: {
-            overlay.reset()
+            root.requestStop()
             root.requestVerify()
-            overlay.show()
-            overlay.raise()
-            overlay.requestActivate()
         }
     }
 

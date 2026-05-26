@@ -104,7 +104,7 @@ class FprintdBackend(QObject):
                         self.verifyResult.emit(True)
                         return
                     elif "verify-no-match" in line:
-                        self.retryScan.emit("Fingerprint not recognized")
+                        self.retryScan.emit("Not recognized — press sensor again")
                     elif "verify-retry-scan" in line:
                         self.retryScan.emit("Lift and re-press your finger")
                     elif "verify-unknown" in line:
