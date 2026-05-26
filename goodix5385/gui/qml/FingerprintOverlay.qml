@@ -157,20 +157,26 @@ Window {
 
             Button {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "Cancel"
+                text: overlay.success ? "Back" : "Cancel"
                 flat: true
                 contentItem: Text {
                     text: parent.text
-                    color: "#f38ba8"
+                    color: overlay.success ? "#a6e3a1" : "#f38ba8"
                     font.pixelSize: 13
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
-                    color: parent.hovered ? "#2a1e24" : "transparent"
+                    color: parent.hovered ? "#1e2a1e" : "transparent"
                     radius: 8
                 }
-                onClicked: overlay.cancel()
+                onClicked: {
+                    if (overlay.success) {
+                        overlay.hide()
+                    } else {
+                        overlay.cancel()
+                    }
+                }
             }
 
             Item { width: 1; height: 1 }

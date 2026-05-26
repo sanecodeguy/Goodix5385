@@ -48,6 +48,7 @@ class FprintBridge(QObject):
             overlay.setProperty("success", True)
             overlay.setProperty("status", "Enrollment complete!")
             overlay.setProperty("scanCount", 8)
+            overlay.setProperty("fingerName", "")
 
     def _on_stage_passed(self):
         overlay = self._get_overlay()
