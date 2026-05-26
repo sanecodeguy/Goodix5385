@@ -208,6 +208,7 @@ ApplicationWindow {
     }
 
     FingerprintOverlay {
+        id: overlay
         objectName: "overlay"
         onCancel: {
             root.requestStop()

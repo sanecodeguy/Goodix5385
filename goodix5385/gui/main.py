@@ -5,14 +5,12 @@ import os
 import sys
 
 from PySide6.QtCore import QObject, Slot, QUrl
-from PySide6.QtGui import QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtWidgets import QApplication
 
 from .fprintd_dbus import FprintdBackend
 
 QML_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qml")
-ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
 
 
 class FprintBridge(QObject):
@@ -28,6 +26,8 @@ class FprintBridge(QObject):
         backend.error.connect(self._on_error)
         backend.verifyResult.connect(self._on_verify_result)
         backend.deviceFound.connect(self._on_device_found)
+
+        backend.find_device()
 
     def _get_root(self):
         if self._root is None:

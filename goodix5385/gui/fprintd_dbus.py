@@ -19,7 +19,7 @@ class FprintdBackend(QObject):
         self._stop = False
         self._verify_result = False
 
-    def _find_device(self):
+    def find_device(self):
         try:
             result = subprocess.run(
                 ["fprintd-list"],
@@ -42,7 +42,7 @@ class FprintdBackend(QObject):
 
     @Slot(str)
     def start_enroll(self, finger="right-index-finger"):
-        if not self._find_device():
+        if not self.find_device():
             return
 
         self._stop = False
@@ -83,7 +83,7 @@ class FprintdBackend(QObject):
 
     @Slot(str)
     def start_verify(self, finger=""):
-        if not self._find_device():
+        if not self.find_device():
             return
 
         self._stop = False
