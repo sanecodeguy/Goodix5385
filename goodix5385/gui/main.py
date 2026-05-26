@@ -5,9 +5,9 @@ import os
 import sys
 
 from PySide6.QtCore import QObject, Slot, QUrl
-from PySide6.QtGui import QIcon, QAction
+from PySide6.QtGui import QIcon
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PySide6.QtWidgets import QApplication
 
 from .fprintd_dbus import FprintdBackend
 
@@ -16,12 +16,10 @@ ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
 
 
 class FprintBridge(QObject):
-    def __init__(self, backend: FprintdBackend, engine: QQmlApplicationEngine,
-                 tray: QSystemTrayIcon, parent=None):
+    def __init__(self, backend: FprintdBackend, engine: QQmlApplicationEngine, parent=None):
         super().__init__(parent)
         self._backend = backend
         self._engine = engine
-        self._tray = tray
         self._root = None
 
         backend.enrolled.connect(self._on_enrolled)
@@ -49,6 +47,7 @@ class FprintBridge(QObject):
         if overlay:
             overlay.setProperty("success", True)
             overlay.setProperty("status", "Enrollment complete!")
+            overlay.setProperty("scanCount", 8)
 
     def _on_stage_passed(self):
         overlay = self._get_overlay()
@@ -98,67 +97,20 @@ class FprintBridge(QObject):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Goodix5385 Fingerprint")
-    app.setQuitOnLastWindowClosed(False)
+    app.setQuitOnLastWindowClosed(True)
 
-    # Setup tray icon
-    icon_path = os.path.join(ICON_DIR, "fingerprint.svg")
-    tray_icon = QIcon(icon_path) if os.path.exists(icon_path) else QIcon()
-
-    tray = QSystemTrayIcon()
-    tray.setIcon(tray_icon)
-    tray.setToolTip("Goodix5385 Fingerprint")
-
-    menu = QMenu()
-    enroll_action = QAction("Enroll Fingerprint")
-    verify_action = QAction("Verify Fingerprint")
-    quit_action = QAction("Quit")
-    menu.addAction(enroll_action)
-    menu.addAction(verify_action)
-    menu.addSeparator()
-    menu.addAction(quit_action)
-    tray.setContextMenu(menu)
-
-    # Setup backend and engine
     backend = FprintdBackend()
     engine = QQmlApplicationEngine()
 
-    bridge = FprintBridge(backend, engine, tray)
+    bridge = FprintBridge(backend, engine)
     engine.rootContext().setContextProperty("fprintBridge", bridge)
 
     qml_path = QUrl.fromLocalFile(os.path.join(QML_DIR, "main.qml"))
     engine.load(qml_path)
 
-    root_win = None
-    if engine.rootObjects():
-        root_win = engine.rootObjects()[0]
-
-    if not root_win:
+    if not engine.rootObjects():
         print("Failed to load QML UI", file=sys.stderr)
         return 1
-
-    # Connect tray menu actions
-    def on_enroll_click():
-        dlg = root_win.findChild(QObject, "fingerDialog")
-        if dlg:
-            dlg.setProperty("visible", True)
-            dlg.setProperty("selectedFinger", "right-index-finger")
-    enroll_action.triggered.connect(on_enroll_click)
-
-    def on_verify_click():
-        bridge.on_verify()
-        overlay = bridge._get_overlay()
-        if overlay:
-            overlay.setProperty("isEnrolling", False)
-            overlay.setProperty("fingerName", "")
-            overlay.setProperty("success", False)
-            overlay.setProperty("status", "Place your finger on the sensor")
-            overlay.setProperty("scanCount", 0)
-            overlay.setProperty("visible", True)
-    verify_action.triggered.connect(on_verify_click)
-
-    quit_action.triggered.connect(app.quit)
-
-    tray.show()
 
     return app.exec()
 
