@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Shapes 1.15
 
 Window {
     id: overlay
@@ -29,14 +28,6 @@ Window {
         border.color: "#313244"
         border.width: 1
 
-        layer.enabled: true
-        layer.effect: DropShadow {
-            transparentBorder: true
-            radius: 32
-            samples: 64
-            color: "#80000000"
-        }
-
         Column {
             anchors.centerIn: parent
             spacing: 24
@@ -58,51 +49,43 @@ Window {
                     ColorAnimation { duration: 300 }
                 }
 
-                Shape {
+                Item {
                     anchors.centerIn: parent
-                    width: 100
-                    height: 120
-                    antialiasing: true
+                    width: 90
+                    height: 110
 
-                    ShapePath {
-                        strokeColor: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#6c7086")
-                        strokeWidth: 3
-                        fillColor: "transparent"
-                        capStyle: ShapePath.RoundCap
-                        joinStyle: ShapePath.RoundJoin
-
-                        PathSvg { path: "M50 10 C22 10 10 30 10 50 L10 80 C10 100 22 110 30 110 L30 50 C30 35 40 25 50 25 C60 25 70 35 70 50 L70 110 C78 110 90 100 90 80 L90 50 C90 30 78 10 50 10Z" }
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 0
+                        width: 50
+                        height: 60
+                        radius: 25
+                        color: "transparent"
+                        border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#6c7086")
+                        border.width: 3
                     }
 
-                    ShapePath {
-                        strokeColor: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#6c7086")
-                        strokeWidth: 2.5
-                        fillColor: "transparent"
-                        capStyle: ShapePath.RoundCap
-
-                        PathSvg { path: "M50 40 L50 65 M35 50 L65 50" }
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 48
+                        width: 30
+                        height: 18
+                        radius: 15
+                        color: "transparent"
+                        border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#6c7086")
+                        border.width: 2
                     }
 
-                    ShapePath {
-                        strokeColor: overlay.success ? "#a6e3a1" : "#89b4fa"
-                        strokeWidth: 2
-                        fillColor: "transparent"
-                        capStyle: ShapePath.RoundCap
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 22
+                        width: 14
+                        height: 14
+                        radius: 7
+                        color: overlay.success ? "#a6e3a1" : "#89b4fa"
+                        opacity: 0.15
                         visible: overlay.scanCount > 0
-
-                        PathSvg { path: "M30 75 Q50 90 70 75" }
                     }
-                }
-
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: 60; height: 60; radius: 30
-                    color: overlay.success ? "#a6e3a1" : "#89b4fa"
-                    opacity: overlay.scanCount > 0 ? 0.15 : 0
-                    scale: overlay.scanCount > 0 ? 1 : 0.5
-
-                    Behavior on opacity { NumberAnimation { duration: 300 } }
-                    Behavior on scale { NumberAnimation { duration: 300 } }
                 }
 
                 SequentialAnimation {
@@ -127,23 +110,19 @@ Window {
             }
 
             Text {
-                id: titleText
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: overlay.isEnrolling ? "Enrolling Fingerprint" : "Verify Fingerprint"
                 color: "#cdd6f4"
                 font.pixelSize: 18
                 font.weight: Font.DemiBold
-                font.family: "Segoe UI, SF Pro, sans-serif"
             }
 
             Text {
-                id: fingerText
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: overlay.fingerName
                 color: "#a6adc8"
                 font.pixelSize: 13
                 visible: overlay.fingerName.length > 0
-                font.family: "Segoe UI, SF Pro, sans-serif"
             }
 
             Rectangle {
@@ -158,7 +137,6 @@ Window {
                     text: overlay.status
                     color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#6c7086")
                     font.pixelSize: 13
-                    font.family: "Segoe UI, SF Pro, sans-serif"
                 }
             }
 

@@ -1,11 +1,17 @@
-"""D-Bus interface to fprintd for fingerprint operations."""
+"""D-Bus interface to fprintd for fingerprint operations.
+Uses dbus-python (GLib main loop) with Qt signals for QML integration.
+"""
+
+import dbus
+import dbus.mainloop.glib
 
 from PySide6.QtCore import QObject, Signal, Slot
-from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusReply
+from gi.repository import GLib
 
-FPF_SERVICE = "net.reactivated.Fprint"
-FPF_MANAGER_PATH = "/net/reactivated/Fprint"
+FPF_BUS = "net.reactivated.Fprint"
+FPF_MANAGER_PATH = "/net/reactivated/Fprint/Manager"
 FPF_MANAGER_IFACE = "net.reactivated.Fprint.Manager"
+FPF_DEVICE_PATH = "/net/reactivated/Fprint/Device/0"
 FPF_DEVICE_IFACE = "net.reactivated.Fprint.Device"
 
 
@@ -19,43 +25,38 @@ class FprintdBackend(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._bus = QDBusConnection.systemBus()
+        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+        self._bus = dbus.SystemBus()
         self._device = None
-        self._device_iface = None
+        self._loop = None
 
     def _find_device(self):
-        manager = QDBusInterface(
-            FPF_SERVICE, FPF_MANAGER_PATH, FPF_MANAGER_IFACE, self._bus
-        )
-        if not manager.isValid():
-            self.deviceFound.emit(False)
-            self.error.emit("fprintd not available")
-            return False
+        try:
+            manager = self._bus.get_object(
+                FPF_BUS, FPF_MANAGER_PATH
+            )
+            mgr_iface = dbus.Interface(manager, FPF_MANAGER_IFACE)
+            devices = mgr_iface.GetDevices()
+            if not devices:
+                self.deviceFound.emit(False)
+                self.error.emit("No fingerprint devices found")
+                return False
 
-        reply = manager.call("GetDevices")
-        devices = reply.arguments()[0] if reply.arguments() else []
-        if not devices:
-            self.deviceFound.emit(False)
-            self.error.emit("No fingerprint devices found")
-            return False
+            path = devices[0]
+            self._device = self._bus.get_object(FPF_BUS, path)
+            self._device.connect_to_signal(
+                "EnrollStatus", self._on_enroll_status
+            )
+            self._device.connect_to_signal(
+                "VerifyStatus", self._on_verify_status
+            )
+            self.deviceFound.emit(True)
+            return True
 
-        self._device = devices[0]
-        self._device_iface = QDBusInterface(
-            FPF_SERVICE, self._device, FPF_DEVICE_IFACE, self._bus
-        )
-        if not self._device_iface.isValid():
+        except dbus.DBusException as e:
             self.deviceFound.emit(False)
-            self.error.emit("Failed to open device interface")
+            self.error.emit(f"fprintd error: {e}")
             return False
-
-        self._device_iface.connect(
-            "EnrollStatus", self, self._on_enroll_status
-        )
-        self._device_iface.connect(
-            "VerifyStatus", self, self._on_verify_status
-        )
-        self.deviceFound.emit(True)
-        return True
 
     def _on_enroll_status(self, result, done):
         if result == "enroll-stage-passed":
@@ -67,7 +68,7 @@ class FprintdBackend(QObject):
         elif result == "enroll-failed":
             self.error.emit("Enrollment failed")
         else:
-            self.error.emit(f"Unknown status: {result}")
+            self.error.emit(f"Unknown: {result}")
 
     def _on_verify_status(self, result, done):
         if result == "verify-match":
@@ -83,19 +84,22 @@ class FprintdBackend(QObject):
     def start_enroll(self, finger="right-index-finger"):
         if not self._find_device():
             return
-        self._device_iface.call("EnrollStart", finger)
+        iface = dbus.Interface(self._device, FPF_DEVICE_IFACE)
+        iface.EnrollStart(finger)
 
-    @Slot()
-    def start_verify(self):
+    @Slot(str)
+    def start_verify(self, finger=""):
         if not self._find_device():
             return
-        self._device_iface.call("VerifyStart", "")
+        iface = dbus.Interface(self._device, FPF_DEVICE_IFACE)
+        iface.VerifyStart(finger)
 
     @Slot()
     def stop_current(self):
-        if self._device_iface:
+        if self._device:
             try:
-                self._device_iface.call("EnrollStop")
-                self._device_iface.call("VerifyStop")
+                iface = dbus.Interface(self._device, FPF_DEVICE_IFACE)
+                iface.EnrollStop()
+                iface.VerifyStop()
             except Exception:
                 pass
