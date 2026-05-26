@@ -14,10 +14,12 @@ Window {
     property string status: "Place your finger on the sensor"
     property bool success: false
     property int scanCount: 0
+    property bool retryMode: false
 
     signal startEnroll(string finger)
     signal startVerify()
     signal cancel()
+    signal retry()
 
     Rectangle {
         anchors.centerIn: parent
@@ -42,7 +44,7 @@ Window {
                 height: 160
                 radius: 80
                 color: "#181825"
-                border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#313244")
+                border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#313244"))
                 border.width: 2
 
                 Behavior on border.color {
@@ -61,7 +63,7 @@ Window {
                         height: 60
                         radius: 25
                         color: "transparent"
-                        border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#6c7086")
+                        border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#6c7086"))
                         border.width: 3
                     }
 
@@ -72,7 +74,7 @@ Window {
                         height: 18
                         radius: 15
                         color: "transparent"
-                        border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#6c7086")
+                        border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#6c7086"))
                         border.width: 2
                     }
 
@@ -89,7 +91,7 @@ Window {
                 }
 
                 SequentialAnimation {
-                    running: overlay.scanCount > 0 && !overlay.success
+                    running: (overlay.scanCount > 0 || overlay.retryMode) && !overlay.success
                     loops: Animation.Infinite
 
                     NumberAnimation {
@@ -128,14 +130,14 @@ Window {
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 280; height: 36; radius: 18
-                color: overlay.success ? "#1e3a2f" : (overlay.scanCount > 0 ? "#1e2a4a" : "#181825")
-                border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#313244")
+                color: overlay.success ? "#1e3a2f" : (overlay.scanCount > 0 ? "#1e2a4a" : (overlay.retryMode ? "#3a3020" : "#181825"))
+                border.color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#313244"))
                 border.width: 1
 
                 Text {
                     anchors.centerIn: parent
                     text: overlay.status
-                    color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : "#6c7086")
+                    color: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#6c7086"))
                     font.pixelSize: 13
                 }
             }
@@ -157,11 +159,11 @@ Window {
 
             Button {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: overlay.success ? "Back" : "Cancel"
+                text: overlay.success ? "Back" : (overlay.retryMode ? "Try Again" : "Cancel")
                 flat: true
                 contentItem: Text {
                     text: parent.text
-                    color: overlay.success ? "#a6e3a1" : "#f38ba8"
+                    color: overlay.success ? "#a6e3a1" : (overlay.retryMode ? "#f9e2af" : "#f38ba8")
                     font.pixelSize: 13
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -173,6 +175,8 @@ Window {
                 onClicked: {
                     if (overlay.success) {
                         overlay.hide()
+                    } else if (overlay.retryMode) {
+                        overlay.retry()
                     } else {
                         overlay.cancel()
                     }
@@ -186,6 +190,7 @@ Window {
     function reset() {
         scanCount = 0
         success = false
+        retryMode = false
         status = "Place your finger on the sensor"
     }
 }

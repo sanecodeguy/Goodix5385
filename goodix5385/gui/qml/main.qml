@@ -214,6 +214,13 @@ ApplicationWindow {
             root.requestStop()
             overlay.hide()
         }
+        onRetry: {
+            overlay.reset()
+            root.requestVerify()
+            overlay.show()
+            overlay.raise()
+            overlay.requestActivate()
+        }
     }
 
     Window {

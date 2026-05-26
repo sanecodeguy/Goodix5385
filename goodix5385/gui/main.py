@@ -60,6 +60,7 @@ class FprintBridge(QObject):
     def _on_retry(self, msg: str):
         overlay = self._get_overlay()
         if overlay:
+            overlay.setProperty("retryMode", False)
             overlay.setProperty("status", msg)
 
     def _on_device_found(self, found: bool):
@@ -79,8 +80,11 @@ class FprintBridge(QObject):
             if matched:
                 overlay.setProperty("success", True)
                 overlay.setProperty("status", "Verified!")
+                overlay.setProperty("retryMode", False)
             else:
+                overlay.setProperty("retryMode", True)
                 overlay.setProperty("status", "Not recognized — try again")
+                overlay.setProperty("scanCount", 0)
 
     @Slot(str)
     def on_enroll(self, finger: str):
