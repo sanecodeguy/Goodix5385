@@ -89,33 +89,40 @@ class FprintdBackend(QObject):
         self._stop = False
 
         def run():
-            try:
-                proc = subprocess.Popen(
-                    ["fprintd-verify"],
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1
-                )
-                for line in proc.stdout:
-                    if self._stop:
-                        proc.terminate()
+            while not self._stop:
+                try:
+                    proc = subprocess.Popen(
+                        ["fprintd-verify"],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, bufsize=1
+                    )
+                    matched = False
+                    for line in proc.stdout:
+                        if self._stop:
+                            proc.terminate()
+                            return
+                        line = line.strip()
+                        if "verify-match" in line:
+                            self.verifyResult.emit(True)
+                            matched = True
+                            break
+                        elif "verify-no-match" in line:
+                            self.retryScan.emit("Not recognized — press sensor again")
+                            break
+                        elif "verify-retry-scan" in line:
+                            self.retryScan.emit("Lift and re-press your finger")
+                        elif "verify-unknown" in line:
+                            self.error.emit("Verification error")
+                            return
+                        elif "failed" in line.lower() and "error" in line.lower():
+                            self.error.emit(line)
+                            return
+                    proc.wait()
+                    if matched or self._stop:
                         return
-                    line = line.strip()
-                    if "verify-match" in line:
-                        self.verifyResult.emit(True)
-                        return
-                    elif "verify-no-match" in line:
-                        self.retryScan.emit("Not recognized — press sensor again")
-                    elif "verify-retry-scan" in line:
-                        self.retryScan.emit("Lift and re-press your finger")
-                    elif "verify-unknown" in line:
-                        self.error.emit("Verification error")
-                        return
-                    elif "failed" in line.lower() and "error" in line.lower():
-                        self.error.emit(line)
-                        return
-                proc.wait()
-            except Exception as e:
-                self.error.emit(str(e))
+                except Exception as e:
+                    self.error.emit(str(e))
+                    return
 
         threading.Thread(target=run, daemon=True).start()
 
