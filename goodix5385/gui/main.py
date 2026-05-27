@@ -29,8 +29,6 @@ class FprintBridge(QObject):
         backend.deviceFound.connect(self._on_device_found)
         backend.enrolledFingersChanged.connect(self._on_enrolled_fingers)
 
-        backend.find_device()
-
     def _get_root(self):
         if self._root is None:
             objs = self._engine.rootObjects()
@@ -136,6 +134,8 @@ def main():
     if not engine.rootObjects():
         print("Failed to load QML UI", file=sys.stderr)
         return 1
+
+    backend.find_device()
 
     return app.exec()
 
