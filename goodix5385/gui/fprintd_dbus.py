@@ -142,3 +142,15 @@ class FprintdBackend(QObject):
         self._verify_gen += 1
         subprocess.run(["pkill", "-f", "fprintd-enroll"], capture_output=True)
         subprocess.run(["pkill", "-f", "fprintd-verify"], capture_output=True)
+
+    @Slot(str)
+    def delete_finger(self, finger: str):
+        import getpass
+        try:
+            subprocess.run(
+                ["fprintd-delete", getpass.getuser(), "--finger", finger],
+                capture_output=True, timeout=10
+            )
+            self.find_device()
+        except Exception as e:
+            self.error.emit(str(e))

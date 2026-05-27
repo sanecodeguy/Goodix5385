@@ -83,12 +83,6 @@ class FprintBridge(QObject):
 
     def _on_enrolled_fingers(self, fingers: list):
         self._cached_fingers = fingers
-        overlay = self._get_overlay()
-        if overlay and not overlay.property("isEnrolling"):
-            if fingers:
-                overlay.setProperty("fingerName", ", ".join(fingers))
-            else:
-                overlay.setProperty("fingerName", "No enrolled fingers — enroll first")
 
     @Slot()
     def on_verify(self):
@@ -101,7 +95,7 @@ class FprintBridge(QObject):
                 overlay.setProperty("success", True)
                 overlay.setProperty("status", "Verified!")
                 overlay.setProperty("retryMode", False)
-                overlay.setProperty("fingerName", ", ".join(self._cached_fingers) if self._cached_fingers else "Verified finger")
+                overlay.setProperty("fingerName", "")
             else:
                 overlay.setProperty("retryMode", True)
                 overlay.setProperty("status", "Not recognized — try again")
@@ -110,6 +104,10 @@ class FprintBridge(QObject):
     @Slot(str)
     def on_enroll(self, finger: str):
         self._backend.start_enroll(finger)
+
+    @Slot(str)
+    def on_delete(self, finger: str):
+        self._backend.delete_finger(finger)
 
     @Slot()
     def on_stop(self):

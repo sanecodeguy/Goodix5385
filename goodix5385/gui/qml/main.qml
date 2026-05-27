@@ -6,13 +6,13 @@ import QtQuick.Layouts 1.15
 ApplicationWindow {
     id: root
     width: 400
-    height: 420
+    height: 440
     visible: true
     flags: Qt.WindowStaysOnTopHint
     color: "#1e1e2e"
     title: "Fingerprint Scanner"
     minimumWidth: 380
-    minimumHeight: 380
+    minimumHeight: 400
 
     property bool deviceAvailable: false
     property string statusMessage: "Initializing..."
@@ -20,6 +20,7 @@ ApplicationWindow {
     signal requestEnroll(string finger)
     signal requestVerify()
     signal requestStop()
+    signal requestDelete(string finger)
 
     Rectangle {
         anchors.centerIn: parent
@@ -96,11 +97,14 @@ ApplicationWindow {
                     border.width: 1
 
                     MouseArea {
-                        id: enrollArea
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
+                            fingerDialog.dialogMode = "enroll"
+                            fingerDialog.title = "Select Finger"
+                            fingerDialog.prompt = "Choose which finger to enroll:"
+                            fingerDialog.actionText = "Start Enroll"
                             fingerDialog.visible = true
                             fingerDialog.raise()
                             fingerDialog.requestActivate()
@@ -142,7 +146,6 @@ ApplicationWindow {
                     border.width: 1
 
                     MouseArea {
-                        id: verifyArea
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
@@ -182,6 +185,47 @@ ApplicationWindow {
                             color: "#6c7086"
                             font.pixelSize: 11
                         }
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 44
+                radius: 12
+                color: "#1e1e2e"
+                border.color: parent.containsMouse ? "#f38ba8" : "#313244"
+                border.width: 1
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        fingerDialog.dialogMode = "delete"
+                        fingerDialog.title = "Delete Finger"
+                        fingerDialog.prompt = "Select finger to delete:"
+                        fingerDialog.actionText = "Delete"
+                        fingerDialog.visible = true
+                        fingerDialog.raise()
+                        fingerDialog.requestActivate()
+                    }
+                }
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 8
+
+                    Text {
+                        text: "✕"
+                        color: "#f38ba8"
+                        font.pixelSize: 16
+                    }
+                    Text {
+                        text: "Delete Fingerprint"
+                        color: "#f38ba8"
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
                     }
                 }
             }
@@ -230,6 +274,11 @@ ApplicationWindow {
         flags: Qt.WindowStaysOnTopHint | Qt.Dialog
         color: "#1e1e2e"
 
+        property string selectedFinger: "right-index-finger"
+        property string dialogMode: "enroll"
+        property string prompt: "Choose which finger to enroll:"
+        property string actionText: "Start Enroll"
+
         onVisibleChanged: {
             if (visible) {
                 x = (Screen.width - width) / 2
@@ -244,7 +293,7 @@ ApplicationWindow {
             spacing: 12
 
             Text {
-                text: "Select Finger"
+                text: fingerDialog.title
                 color: "#cdd6f4"
                 font.pixelSize: 16
                 font.weight: Font.DemiBold
@@ -254,7 +303,7 @@ ApplicationWindow {
             Rectangle { width: parent.width; height: 1; color: "#313244" }
 
             Text {
-                text: "Choose which finger to enroll:"
+                text: fingerDialog.prompt
                 color: "#a6adc8"
                 font.pixelSize: 12
             }
@@ -321,30 +370,32 @@ ApplicationWindow {
                     onClicked: fingerDialog.visible = false
                 }
                 Button {
-                    text: "Start"
+                    text: fingerDialog.actionText
                     contentItem: Text {
                         text: parent.text; color: "#a6e3a1"; font.pixelSize: 13
                     }
                     background: Rectangle {
                         color: parent.hovered ? "#1e2a1e" : "transparent"
                         border.color: "#a6e3a1"; border.width: 1
-                        radius: 8; implicitWidth: 90; implicitHeight: 34
+                        radius: 8; implicitWidth: 100; implicitHeight: 34
                     }
                     onClicked: {
-                        overlay.reset()
-                        overlay.isEnrolling = true
-                        overlay.fingerName = fingerDialog.selectedFinger.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase())
-                        root.requestEnroll(fingerDialog.selectedFinger)
+                        if (fingerDialog.dialogMode === "delete") {
+                            root.requestDelete(fingerDialog.selectedFinger)
+                        } else {
+                            overlay.reset()
+                            overlay.isEnrolling = true
+                            overlay.fingerName = fingerDialog.selectedFinger.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+                            root.requestEnroll(fingerDialog.selectedFinger)
+                            overlay.show()
+                            overlay.raise()
+                            overlay.requestActivate()
+                        }
                         fingerDialog.visible = false
-                        overlay.show()
-                        overlay.raise()
-                        overlay.requestActivate()
                     }
                 }
             }
         }
-
-        property string selectedFinger: "right-index-finger"
     }
 
     Connections {
@@ -352,5 +403,6 @@ ApplicationWindow {
         function onRequestEnroll(finger) { fprintBridge.on_enroll(finger) }
         function onRequestVerify() { fprintBridge.on_verify() }
         function onRequestStop() { fprintBridge.on_stop() }
+        function onRequestDelete(finger) { fprintBridge.on_delete(finger) }
     }
 }
