@@ -91,17 +91,16 @@ class FprintBridge(QObject):
     @Slot()
     def on_verify(self):
         self._backend.start_verify()
-        overlay = self._get_overlay()
-        if overlay:
-            overlay.setProperty("fingerName", "Scanning...")
 
     def _on_verify_result(self, matched: bool):
         overlay = self._get_overlay()
         if overlay:
+            fn = overlay.property("fingerName")
             if matched:
                 overlay.setProperty("success", True)
                 overlay.setProperty("status", "Verified!")
                 overlay.setProperty("retryMode", False)
+                overlay.setProperty("fingerName", fn.replace("Checking: ", "Matched: ") if fn else "Verified finger")
             else:
                 overlay.setProperty("retryMode", True)
                 overlay.setProperty("status", "Not recognized — try again")
