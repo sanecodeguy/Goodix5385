@@ -24,7 +24,7 @@ class FprintdBackend(QObject):
         fingers = []
         for line in output.split('\n'):
             line = line.strip()
-            if ' - #' in line and ':' in line:
+            if line.startswith('- #') and ':' in line:
                 finger_part = line.split(':', 1)[1].strip()
                 finger_name = finger_part.replace('-', ' ').title()
                 fingers.append(finger_name)
