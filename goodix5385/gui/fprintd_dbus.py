@@ -1,7 +1,9 @@
 """Backend for fingerprint operations using fprintd CLI tools via subprocess."""
 
 import subprocess
+import sys
 import threading
+import time
 
 from PySide6.QtCore import QObject, Signal, Slot
 
@@ -103,79 +105,48 @@ class FprintdBackend(QObject):
 
                 proc = None
                 try:
+                    cmd = ["fprintd-verify"]
+                    if finger:
+                        cmd.extend(["--finger", finger])
                     proc = subprocess.Popen(
-                        ["fprintd-verify"],
+                        cmd,
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, bufsize=1
                     )
 
-                    outcome = None  # 'match' | 'nomatch' | 'retry' | 'error'
-
                     for line in proc.stdout:
                         if gen != self._verify_gen:
                             proc.terminate()
-                            proc.wait()
                             return
 
                         line = line.strip()
 
                         if "verify-match" in line:
-                            outcome = 'match'
                             proc.terminate()
-                            break
-                        elif "verify-no-match" in line:
-                            outcome = 'nomatch'
+                            try: proc.wait(timeout=0.3)
+                            except: proc.kill(); proc.wait()
+                            self.verifyResult.emit(True)
+                            return
+                        elif "verify-no-match" in line or "verify-unknown" in line:
                             proc.terminate()
+                            try: proc.wait(timeout=0.3)
+                            except: proc.kill(); proc.wait()
+                            self.retryScan.emit("Not recognized — try again")
+                            time.sleep(0.2)
                             break
                         elif "verify-retry-scan" in line:
-                            outcome = 'retry'
-                            proc.terminate()
-                            break
-                        elif "verify-unknown" in line:
-                            outcome = 'nomatch'
-                            proc.terminate()
-                            break
+                            self.retryScan.emit("Lift and re-press your finger")
+                            continue
                         elif "failed" in line.lower() and "error" in line.lower():
-                            outcome = 'error'
-                            proc.terminate()
+                            self.retryScan.emit("Device error — resetting sensor...")
+                            subprocess.run(["pkill", "fprintd"], capture_output=True)
+                            subprocess.run([sys.executable, "-m", "goodix5385.scripts.usb_reset"], capture_output=True)
+                            time.sleep(1.0)
                             break
-
-                    # Drain and reap — but don't block long; timeout after 0.5s
-                    try:
-                        proc.wait(timeout=0.5)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
-                        proc.wait()
 
                 except Exception as e:
                     self.error.emit(str(e))
                     return
-
-                if gen != self._verify_gen:
-                    return
-
-                if outcome == 'match':
-                    self.verifyResult.emit(True)
-                    return
-                elif outcome == 'nomatch':
-                    # Emit no-match immediately so UI shows feedback,
-                    # then loop back instantly — no sleep needed.
-                    self.retryScan.emit("Not recognized — try again")
-                    # fall through to loop and restart immediately
-                elif outcome == 'retry':
-                    self.retryScan.emit("Lift and re-press your finger")
-                    # fall through to loop and restart immediately
-                elif outcome == 'error':
-                    self.error.emit("Verification error")
-                    return
-                else:
-                    # Process ended without any recognised line — restart
-                    self.retryScan.emit("Scan not detected — try again")
-
-                # Brief yield so fprintd has time to release the device lock
-                # before we re-open it.  50 ms is enough; 1000ms was the killer.
-                import time
-                time.sleep(0.05)
 
         threading.Thread(target=run, daemon=True).start()
 

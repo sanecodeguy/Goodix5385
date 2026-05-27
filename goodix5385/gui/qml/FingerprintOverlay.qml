@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import Qt.labs.lottieqt 1.0
 
 Window {
     id: overlay
@@ -26,7 +25,18 @@ Window {
     property real glowRadius: 0.0
 
     signal cancel()
-    signal retry()
+
+    // ── Auto-reset from no-match back to scanning ─────────────────────────────
+    Timer {
+        id: resetTimer
+        interval: 1200
+        onTriggered: {
+            if (overlay.retryMode) {
+                overlay.retryMode = false
+                overlay.status = "Place your finger on the sensor"
+            }
+        }
+    }
 
     // ── Shake on no-match ────────────────────────────────────────────────────
     SequentialAnimation {
@@ -64,7 +74,7 @@ Window {
         NumberAnimation { target: overlay; property: "ridgeOpacity"; to: 0.6; duration: 400; easing.type: Easing.OutCubic }
     }
 
-    onRetryModeChanged: { if (retryMode) shakeAnim.start() }
+    onRetryModeChanged: { if (retryMode) { shakeAnim.start(); resetTimer.restart() } }
     onScanCountChanged: { scanFlash.start() }
     onSuccessChanged:   { if (success) { idlePulse.stop(); successBurst.start() } }
 
@@ -155,28 +165,63 @@ Window {
                     Behavior on border.color { ColorAnimation { duration: 300 } }
                 }
 
-                LottieAnimation {
-                    id: fpAnim
+                Canvas {
+                    id: fpCanvas
                     anchors.centerIn: parent
                     width: 130; height: 130
-                    source: Qt.resolvedUrl("fingerprint.json")
-                    quality: LottieAnimation.HighQuality
-                    loops: 1
-                    autoPlay: false
 
-                    function computeFrame() {
-                        if (overlay.success) return endFrame
-                        if (!overlay.isEnrolling) {
-                            if (overlay.scanCount > 0 || overlay.retryMode) return endFrame
-                            return 0
-                        }
-                        return Math.round(endFrame * Math.min(overlay.scanCount / 8, 1.0))
-                    }
+                    property int _scanCount: 0
+                    property bool _success: false
+                    property bool _retryMode: false
 
                     property var _dep: [overlay.scanCount, overlay.success, overlay.retryMode, overlay.isEnrolling]
-                    on_DepChanged: { gotoAndStop(computeFrame()) }
+                    on_DepChanged: {
+                        _scanCount = overlay.scanCount
+                        _success = overlay.success
+                        _retryMode = overlay.retryMode
+                        requestPaint()
+                    }
+                    Component.onCompleted: requestPaint()
 
-                    Component.onCompleted: { gotoAndStop(computeFrame()) }
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        var w = width, h = height
+                        ctx.clearRect(0, 0, w, h)
+
+                        var progress = Math.min(_scanCount / 8, 1.0)
+                        if (_success) progress = 1.0
+
+                        var cx = w / 2, cy = h / 2
+                        var maxR = Math.min(w, h) / 2 - 10
+
+                        ctx.strokeStyle = _success ? "#a6e3a1"
+                                          : _retryMode ? "#f38ba8"
+                                          : "#89b4fa"
+                        ctx.lineWidth = 2.5
+                        ctx.lineCap = "round"
+
+                        var rings = 6
+                        for (var i = 0; i < rings; i++) {
+                            var t = (i + 1) / (rings + 1)
+                            var ringR = maxR * t
+                            var frac = Math.max(0, Math.min(1, (progress * rings - i)))
+                            if (frac <= 0) continue
+                            var startA = -Math.PI / 2
+                            var endA = startA + Math.PI * 2 * frac
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, ringR, startA, endA)
+                            ctx.stroke()
+                        }
+
+                        // short center line
+                        if (progress > 0.5) {
+                            var cl = maxR * 0.2
+                            ctx.beginPath()
+                            ctx.moveTo(cx, cy - cl)
+                            ctx.lineTo(cx, cy + cl)
+                            ctx.stroke()
+                        }
+                    }
                 }
             }
 
@@ -229,29 +274,23 @@ Window {
                 }
             }
 
-            // ── Action button ────────────────────────────────────────────────
+            // ── Action button (Cancel while scanning, Done on success) ────────
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 160; height: 40
                 radius: 20
                 color: btnMouse.containsMouse
-                       ? (overlay.success ? "#1a3d2a" : overlay.retryMode ? "#2a1218" : "#161828")
+                       ? (overlay.success ? "#1a3d2a" : "#161828")
                        : "transparent"
-                border.color: overlay.success  ? "#a6e3a160"
-                            : overlay.retryMode ? "#f38ba860"
-                            : "#89b4fa50"
+                border.color: overlay.success ? "#a6e3a160" : "#89b4fa50"
                 border.width: 1
 
                 Behavior on color { ColorAnimation { duration: 150 } }
 
                 Text {
                     anchors.centerIn: parent
-                    text: overlay.success  ? "Done"
-                        : overlay.retryMode ? "Try Again"
-                        : "Cancel"
-                    color: overlay.success  ? "#a6e3a1"
-                         : overlay.retryMode ? "#f38ba8"
-                         : "#555870"
+                    text: overlay.success ? "Done" : "Cancel"
+                    color: overlay.success ? "#a6e3a1" : "#555870"
                     font.pixelSize: 13
                     font.letterSpacing: 0.5
                 }
@@ -261,11 +300,7 @@ Window {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (overlay.success)       overlay.hide()
-                        else if (overlay.retryMode) overlay.retry()
-                        else                        overlay.cancel()
-                    }
+                    onClicked: overlay.success ? overlay.hide() : overlay.cancel()
                 }
             }
         }

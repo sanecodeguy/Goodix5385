@@ -16,7 +16,7 @@ PIP_OPTS="--break-system-packages"
 # Install USB reset script
 echo "  -> Installing USB reset script..."
 mkdir -p "${LIBDIR}/scripts"
-cp goodix5385/scripts/usb-reset.py "${LIBDIR}/scripts/"
+cp goodix5385/scripts/usb_reset.py "${LIBDIR}/scripts/"
 
 # Install systemd service
 echo "  -> Installing systemd service..."

@@ -5,20 +5,20 @@ import QtQuick.Layouts 1.15
 
 ApplicationWindow {
     id: root
-    width: 380
-    height: 420
+    width: 340
+    height: 380
     visible: true
     flags: Qt.WindowStaysOnTopHint
     color: "#07070d"
-    title: "Fingerprint"
-    minimumWidth: 360
-    minimumHeight: 400
+    title: "Goodix 5385"
+    minimumWidth: 320
+    minimumHeight: 340
 
     property bool deviceAvailable: false
     property string statusMessage: "Initializing..."
 
     signal requestEnroll(string finger)
-    signal requestVerify()
+    signal requestVerify(string finger)
     signal requestStop()
     signal requestDelete(string finger)
 
@@ -46,64 +46,39 @@ ApplicationWindow {
         spacing: 0
 
         // ── Header ───────────────────────────────────────────────────────────
-        Column {
+        Text {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 8
+            Layout.topMargin: 6
+            text: "Goodix 5385 Fingerprint"
+            color: "#c8cfe8"
+            font.pixelSize: 15
+            font.weight: Font.Light
+            font.letterSpacing: 1.8
+        }
+
+        // Device status dot + text
+        Row {
+            Layout.alignment: Qt.AlignHCenter
             spacing: 6
 
-            // Mini fingerprint icon
-            Canvas {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: 36; height: 42
-                antialiasing: true
-                onPaint: {
-                    var ctx = getContext("2d")
-                    ctx.clearRect(0, 0, width, height)
-                    var cx = width/2, cy = height/2 + 3
-                    var rings = [[5,4],[10,8],[15,13],[20,18],[25,23]]
-                    for (var i = 0; i < rings.length; i++) {
-                        ctx.beginPath()
-                        ctx.ellipse(cx, cy, rings[i][0], rings[i][1], 0, Math.PI*0.05, Math.PI*1.95)
-                        ctx.strokeStyle = Qt.rgba(0.537, 0.706, 0.980, 0.18 + i*0.06)
-                        ctx.lineWidth = 1.3
-                        ctx.stroke()
-                    }
+            Rectangle {
+                width: 5; height: 5; radius: 2.5
+                anchors.verticalCenter: parent.verticalCenter
+                color: deviceAvailable ? "#a6e3a1" : "#f38ba8"
+
+                SequentialAnimation on opacity {
+                    running: deviceAvailable
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 0.3; duration: 1000 }
+                    NumberAnimation { to: 1.0; duration: 1000 }
                 }
             }
 
             Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "Fingerprint"
-                color: "#c8cfe8"
-                font.pixelSize: 18
-                font.weight: Font.Light
-                font.letterSpacing: 2.5
-            }
-
-            // Device status dot + text
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 6
-
-                Rectangle {
-                    width: 5; height: 5; radius: 2.5
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: deviceAvailable ? "#a6e3a1" : "#f38ba8"
-
-                    SequentialAnimation on opacity {
-                        running: deviceAvailable
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 0.3; duration: 1000 }
-                        NumberAnimation { to: 1.0; duration: 1000 }
-                    }
-                }
-
-                Text {
-                    text: statusMessage
-                    color: deviceAvailable ? "#555c6e" : "#5a3040"
-                    font.pixelSize: 10
-                    font.letterSpacing: 0.4
-                }
+                text: statusMessage
+                color: deviceAvailable ? "#555c6e" : "#5a3040"
+                font.pixelSize: 10
+                font.letterSpacing: 0.4
             }
         }
 
@@ -112,11 +87,11 @@ ApplicationWindow {
         // ── Action cards ──────────────────────────────────────────────────────
         Row {
             Layout.alignment: Qt.AlignHCenter
-            spacing: 12
+            spacing: 14
 
             // Enroll card
             ActionCard {
-                width: 136; height: 120
+                width: 130; height: 110
                 accentColor: "#89b4fa"
                 iconText: "+"
                 label: "Enroll"
@@ -134,21 +109,35 @@ ApplicationWindow {
 
             // Verify card
             ActionCard {
-                width: 136; height: 120
+                width: 130; height: 110
                 accentColor: "#a6e3a1"
                 iconText: "✓"
                 label: "Verify"
                 sublabel: "Scan finger"
                 onActivated: {
-                    overlay.reset()
-                    overlay.isEnrolling = false
-                    overlay.fingerName = ""
-                    overlay.status = "Place your finger on the sensor"
-                    overlay.scanCount = 0
-                    root.requestVerify()
-                    overlay.show()
-                    overlay.raise()
-                    overlay.requestActivate()
+                    if (fingerDialog.enrolledFingers.length === 1) {
+                        // Only one finger — verify it directly
+                        overlay.reset()
+                        overlay.isEnrolling = false
+                        overlay.fingerName = fingerDialog.enrolledFingers[0]
+                            .replace(/-/g, " ")
+                            .replace(/\b\w/g, function(c){ return c.toUpperCase() })
+                        overlay.status = "Place your finger on the sensor"
+                        overlay.scanCount = 0
+                        root.requestVerify(fingerDialog.enrolledFingers[0])
+                        overlay.show()
+                        overlay.raise()
+                        overlay.requestActivate()
+                    } else {
+                        // Multiple fingers — let user pick
+                        fingerDialog.dialogMode = "verify"
+                        fingerDialog.title = "Verify Finger"
+                        fingerDialog.prompt = "Choose which finger to scan:"
+                        fingerDialog.actionText = "Start Verify"
+                        fingerDialog.visible = true
+                        fingerDialog.raise()
+                        fingerDialog.requestActivate()
+                    }
                 }
             }
         }
@@ -161,8 +150,8 @@ ApplicationWindow {
             height: 40
             radius: 12
             color: deleteMouse.containsMouse ? "#180a0c" : "transparent"
-            border.color: deleteMouse.containsMouse ? "#f38ba830" : "#1a1a26"
-            border.width: 1
+            border.color: deleteMouse.containsMouse ? "#f38ba860" : "#2a2a3e"
+            border.width: 1.5
 
             Behavior on color       { ColorAnimation { duration: 150 } }
             Behavior on border.color{ ColorAnimation { duration: 150 } }
@@ -170,8 +159,8 @@ ApplicationWindow {
             Row {
                 anchors.centerIn: parent
                 spacing: 8
-                Text { text: "✕"; color: "#f38ba870"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
-                Text { text: "Delete fingerprint"; color: "#f38ba870"; font.pixelSize: 12; font.letterSpacing: 0.3; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "✕"; color: "#f38ba8"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
+                Text { text: "Delete fingerprint"; color: "#f38ba8"; font.pixelSize: 12; font.letterSpacing: 0.3; anchors.verticalCenter: parent.verticalCenter }
             }
 
             MouseArea {
@@ -197,7 +186,7 @@ ApplicationWindow {
         Text {
             Layout.alignment: Qt.AlignHCenter
             text: "quit"
-            color: quitMouse.containsMouse ? "#3a3d52" : "#25273a"
+            color: quitMouse.containsMouse ? "#555870" : "#353748"
             font.pixelSize: 11
             font.letterSpacing: 1.5
             Behavior on color { ColorAnimation { duration: 120 } }
@@ -218,9 +207,9 @@ ApplicationWindow {
     component ActionCard: Rectangle {
         id: card
         radius: 16
-        color: cardMouse.containsMouse ? Qt.lighter("#0f1020", 1.25) : "#0f1020"
-        border.color: cardMouse.containsMouse ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.35) : "#181828"
-        border.width: 1
+        color: cardMouse.containsMouse ? Qt.lighter("#0f1020", 1.35) : "#0f1020"
+        border.color: cardMouse.containsMouse ? Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.55) : "#2a2a3e"
+        border.width: 1.5
 
         property color accentColor: "#89b4fa"
         property string iconText: ""
@@ -238,23 +227,23 @@ ApplicationWindow {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: card.iconText
-                color: Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.9)
-                font.pixelSize: 22
+                color: Qt.rgba(card.accentColor.r, card.accentColor.g, card.accentColor.b, 0.95)
+                font.pixelSize: 24
                 font.weight: Font.Light
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: card.label
-                color: "#c8cfe8"
-                font.pixelSize: 14
+                color: "#e8eaf6"
+                font.pixelSize: 15
                 font.weight: Font.Medium
                 font.letterSpacing: 0.3
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: card.sublabel
-                color: "#353748"
-                font.pixelSize: 10
+                color: "#555870"
+                font.pixelSize: 11
                 font.letterSpacing: 0.3
             }
         }
@@ -275,11 +264,6 @@ ApplicationWindow {
         onCancel: {
             root.requestStop()
             overlay.hide()
-        }
-        onRetry: {
-            overlay.reset()
-            root.requestStop()
-            root.requestVerify()
         }
     }
 
@@ -346,6 +330,7 @@ ApplicationWindow {
 
                         Repeater {
                             model: fingerDialog.dialogMode === "delete"
+                                   || fingerDialog.dialogMode === "verify"
                                    ? fingerDialog.enrolledFingers
                                    : ["right-index-finger","left-index-finger",
                                       "right-middle-finger","left-middle-finger",
@@ -444,6 +429,16 @@ ApplicationWindow {
                             onClicked: {
                                 if (fingerDialog.dialogMode === "delete") {
                                     root.requestDelete(fingerDialog.selectedFinger)
+                                } else if (fingerDialog.dialogMode === "verify") {
+                                    overlay.reset()
+                                    overlay.isEnrolling = false
+                                    overlay.fingerName = fingerDialog.selectedFinger
+                                        .replace(/-/g, " ")
+                                        .replace(/\b\w/g, function(c){ return c.toUpperCase() })
+                                    root.requestVerify(fingerDialog.selectedFinger)
+                                    overlay.show()
+                                    overlay.raise()
+                                    overlay.requestActivate()
                                 } else {
                                     overlay.reset()
                                     overlay.isEnrolling = true
@@ -467,7 +462,7 @@ ApplicationWindow {
     Connections {
         target: root
         function onRequestEnroll(finger)  { fprintBridge.on_enroll(finger) }
-        function onRequestVerify()        { fprintBridge.on_verify() }
+        function onRequestVerify(finger)  { fprintBridge.on_verify(finger) }
         function onRequestStop()          { fprintBridge.on_stop() }
         function onRequestDelete(finger)  { fprintBridge.on_delete(finger) }
     }

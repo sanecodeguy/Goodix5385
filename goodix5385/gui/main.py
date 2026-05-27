@@ -87,9 +87,9 @@ class FprintBridge(QObject):
             if dlg:
                 dlg.setProperty("enrolledFingers", fingers)
 
-    @Slot()
-    def on_verify(self):
-        self._backend.start_verify()
+    @Slot(str)
+    def on_verify(self, finger=""):
+        self._backend.start_verify(finger)
 
     def _on_verify_result(self, matched: bool):
         overlay = self._get_overlay()
@@ -134,6 +134,10 @@ def main():
     if not engine.rootObjects():
         print("Failed to load QML UI", file=sys.stderr)
         return 1
+
+    # Reset the USB device before fprintd opens it, to avoid "transfer timed out"
+    import subprocess as _sp
+    _sp.run([sys.executable, "-m", "goodix5385.scripts.usb_reset"], capture_output=True)
 
     backend.find_device()
 
