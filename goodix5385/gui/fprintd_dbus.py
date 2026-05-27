@@ -115,17 +115,23 @@ class FprintdBackend(QObject):
                         if "verify-match" in line:
                             self.verifyResult.emit(True)
                             matched = True
+                            proc.terminate()
                             break
                         elif "verify-no-match" in line:
                             self.retryScan.emit("Not recognized — press sensor again")
+                            proc.terminate()
                             break
                         elif "verify-retry-scan" in line:
                             self.retryScan.emit("Lift and re-press your finger")
+                            proc.terminate()
+                            break
                         elif "verify-unknown" in line:
                             self.error.emit("Verification error")
+                            proc.terminate()
                             return
                         elif "failed" in line.lower() and "error" in line.lower():
                             self.error.emit(line)
+                            proc.terminate()
                             return
                     proc.wait()
                     if matched or gen != self._verify_gen:
