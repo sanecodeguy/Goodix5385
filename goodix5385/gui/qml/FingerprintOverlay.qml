@@ -45,12 +45,17 @@ Window {
         NumberAnimation { target: overlay; property: "x"; to: overlay.restX; duration: 40 }
     }
 
-    SequentialAnimation {
+    ParallelAnimation {
         id: flashAnim
-        loops: 1
-        ScriptAction { script: iconFrame.flash = true }
-        PauseAnimation { duration: 150 }
-        ScriptAction { script: iconFrame.flash = false }
+        SequentialAnimation {
+            PropertyAction { target: iconFrame; property: "flashColor"; value: "#ffffff" }
+            PauseAnimation { duration: 120 }
+            PropertyAction { target: iconFrame; property: "flashColor"; value: "transparent" }
+        }
+        SequentialAnimation {
+            NumberAnimation { target: iconFrame; property: "scale"; from: 1.0; to: 1.12; duration: 60; easing.type: Easing.OutQuad }
+            NumberAnimation { target: iconFrame; property: "scale"; from: 1.12; to: 1.0; duration: 80; easing.type: Easing.InQuad }
+        }
     }
 
     Rectangle {
@@ -76,14 +81,24 @@ Window {
                 height: 160
                 radius: 80
                 color: "#181825"
+                clip: true
+                transformOrigin: Item.Center
 
-                property bool flash: false
+                property color flashColor: "transparent"
                 property color baseColor: overlay.success ? "#a6e3a1" : (overlay.scanCount > 0 ? "#89b4fa" : (overlay.retryMode ? "#f9e2af" : "#313244"))
-                border.color: flash ? "#cdd6f4" : baseColor
-                border.width: flash ? 4 : 2
+                border.color: baseColor
+                border.width: 2
 
                 Behavior on border.color {
-                    ColorAnimation { duration: 80 }
+                    ColorAnimation { duration: 200 }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 80
+                    color: iconFrame.flashColor
+                    opacity: 0.6
+                    Behavior on color { ColorAnimation { duration: 60 } }
                 }
 
                 Item {

@@ -13,11 +13,22 @@ class FprintdBackend(QObject):
     retryScan = Signal(str)
     error = Signal(str)
     deviceFound = Signal(bool)
+    enrolledFingersChanged = Signal(list)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._stop = False
         self._verify_result = False
+
+    def _parse_enrolled_fingers(self, output: str):
+        fingers = []
+        for line in output.split('\n'):
+            line = line.strip()
+            if ' - #' in line and ':' in line:
+                finger_part = line.split(':', 1)[1].strip()
+                finger_name = finger_part.replace('-', ' ').title()
+                fingers.append(finger_name)
+        self.enrolledFingersChanged.emit(fingers)
 
     def find_device(self):
         try:
@@ -30,6 +41,7 @@ class FprintdBackend(QObject):
                 self.error.emit("No fingerprint devices found")
                 return False
             self.deviceFound.emit(True)
+            self._parse_enrolled_fingers(result.stdout)
             return True
         except FileNotFoundError:
             self.deviceFound.emit(False)

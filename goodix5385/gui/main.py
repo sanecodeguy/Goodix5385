@@ -26,6 +26,7 @@ class FprintBridge(QObject):
         backend.error.connect(self._on_error)
         backend.verifyResult.connect(self._on_verify_result)
         backend.deviceFound.connect(self._on_device_found)
+        backend.enrolledFingersChanged.connect(self._on_enrolled_fingers)
 
         backend.find_device()
 
@@ -79,6 +80,21 @@ class FprintBridge(QObject):
         if overlay:
             overlay.setProperty("status", f"Error: {msg}")
 
+    def _on_enrolled_fingers(self, fingers: list):
+        overlay = self._get_overlay()
+        if overlay and not overlay.property("isEnrolling"):
+            if fingers:
+                overlay.setProperty("fingerName", "Checking: " + ", ".join(fingers))
+            else:
+                overlay.setProperty("fingerName", "No enrolled fingers — enroll first")
+
+    @Slot()
+    def on_verify(self):
+        self._backend.start_verify()
+        overlay = self._get_overlay()
+        if overlay:
+            overlay.setProperty("fingerName", "Scanning...")
+
     def _on_verify_result(self, matched: bool):
         overlay = self._get_overlay()
         if overlay:
@@ -94,10 +110,6 @@ class FprintBridge(QObject):
     @Slot(str)
     def on_enroll(self, finger: str):
         self._backend.start_enroll(finger)
-
-    @Slot()
-    def on_verify(self):
-        self._backend.start_verify()
 
     @Slot()
     def on_stop(self):
