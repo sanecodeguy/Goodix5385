@@ -19,6 +19,7 @@ class FprintBridge(QObject):
         self._backend = backend
         self._engine = engine
         self._root = None
+        self._cached_fingers = []
 
         backend.enrolled.connect(self._on_enrolled)
         backend.stagePassed.connect(self._on_stage_passed)
@@ -81,10 +82,11 @@ class FprintBridge(QObject):
             overlay.setProperty("status", f"Error: {msg}")
 
     def _on_enrolled_fingers(self, fingers: list):
+        self._cached_fingers = fingers
         overlay = self._get_overlay()
         if overlay and not overlay.property("isEnrolling"):
             if fingers:
-                overlay.setProperty("fingerName", "Checking: " + ", ".join(fingers))
+                overlay.setProperty("fingerName", ", ".join(fingers))
             else:
                 overlay.setProperty("fingerName", "No enrolled fingers — enroll first")
 
@@ -95,12 +97,11 @@ class FprintBridge(QObject):
     def _on_verify_result(self, matched: bool):
         overlay = self._get_overlay()
         if overlay:
-            fn = overlay.property("fingerName")
             if matched:
                 overlay.setProperty("success", True)
                 overlay.setProperty("status", "Verified!")
                 overlay.setProperty("retryMode", False)
-                overlay.setProperty("fingerName", fn.replace("Checking: ", "Matched: ") if fn else "Verified finger")
+                overlay.setProperty("fingerName", ", ".join(self._cached_fingers) if self._cached_fingers else "Verified finger")
             else:
                 overlay.setProperty("retryMode", True)
                 overlay.setProperty("status", "Not recognized — try again")
