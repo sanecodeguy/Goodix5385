@@ -17,7 +17,7 @@ class FprintdBackend(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._stop = False
+        self._verify_gen = 0
         self._verify_result = False
 
     def _parse_enrolled_fingers(self, output: str):
@@ -32,11 +32,12 @@ class FprintdBackend(QObject):
 
     def find_device(self):
         try:
+            import getpass
             result = subprocess.run(
-                ["fprintd-list"],
+                ["fprintd-list", getpass.getuser()],
                 capture_output=True, text=True, timeout=5
             )
-            if "No devices" in result.stderr or "No devices" in result.stdout:
+            if result.returncode != 0 or "No devices" in result.stdout:
                 self.deviceFound.emit(False)
                 self.error.emit("No fingerprint devices found")
                 return False
@@ -57,8 +58,6 @@ class FprintdBackend(QObject):
         if not self.find_device():
             return
 
-        self._stop = False
-
         def run():
             try:
                 proc = subprocess.Popen(
@@ -67,9 +66,6 @@ class FprintdBackend(QObject):
                     text=True, bufsize=1
                 )
                 for line in proc.stdout:
-                    if self._stop:
-                        proc.terminate()
-                        return
                     line = line.strip()
                     if "Enroll result: enroll-stage-passed" in line:
                         self.stagePassed.emit()
@@ -98,10 +94,13 @@ class FprintdBackend(QObject):
         if not self.find_device():
             return
 
-        self._stop = False
+        self._verify_gen += 1
+        gen = self._verify_gen
 
         def run():
-            while not self._stop:
+            while True:
+                if gen != self._verify_gen:
+                    return
                 try:
                     proc = subprocess.Popen(
                         ["fprintd-verify"],
@@ -110,7 +109,7 @@ class FprintdBackend(QObject):
                     )
                     matched = False
                     for line in proc.stdout:
-                        if self._stop:
+                        if gen != self._verify_gen:
                             proc.terminate()
                             return
                         line = line.strip()
@@ -130,7 +129,7 @@ class FprintdBackend(QObject):
                             self.error.emit(line)
                             return
                     proc.wait()
-                    if matched or self._stop:
+                    if matched or gen != self._verify_gen:
                         return
                 except Exception as e:
                     self.error.emit(str(e))
@@ -140,6 +139,6 @@ class FprintdBackend(QObject):
 
     @Slot()
     def stop_current(self):
-        self._stop = True
+        self._verify_gen += 1
         subprocess.run(["pkill", "-f", "fprintd-enroll"], capture_output=True)
         subprocess.run(["pkill", "-f", "fprintd-verify"], capture_output=True)
