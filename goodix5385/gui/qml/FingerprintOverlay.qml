@@ -158,7 +158,7 @@ Window {
                 LottieAnimation {
                     id: fpAnim
                     anchors.centerIn: parent
-                    width: 160; height: 160
+                    width: 130; height: 130
                     source: Qt.resolvedUrl("fingerprint.json")
                     quality: LottieAnimation.HighQuality
                     loops: 1

@@ -132,7 +132,7 @@ class FprintdBackend(QObject):
                             proc.terminate()
                             break
                         elif "verify-unknown" in line:
-                            outcome = 'error'
+                            outcome = 'nomatch'
                             proc.terminate()
                             break
                         elif "failed" in line.lower() and "error" in line.lower():
