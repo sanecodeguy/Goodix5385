@@ -83,6 +83,11 @@ class FprintBridge(QObject):
 
     def _on_enrolled_fingers(self, fingers: list):
         self._cached_fingers = fingers
+        root = self._get_root()
+        if root:
+            dlg = root.findChild(QObject, "fingerDialog")
+            if dlg:
+                dlg.setProperty("enrolledFingers", fingers)
 
     @Slot()
     def on_verify(self):

@@ -26,8 +26,7 @@ class FprintdBackend(QObject):
             line = line.strip()
             if line.startswith('- #') and ':' in line:
                 finger_part = line.split(':', 1)[1].strip()
-                finger_name = finger_part.replace('-', ' ').title()
-                fingers.append(finger_name)
+                fingers.append(finger_part)
         self.enrolledFingersChanged.emit(fingers)
 
     def find_device(self):

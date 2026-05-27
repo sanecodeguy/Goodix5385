@@ -278,6 +278,7 @@ ApplicationWindow {
         property string dialogMode: "enroll"
         property string prompt: "Choose which finger to enroll:"
         property string actionText: "Start Enroll"
+        property var enrolledFingers: []
 
         onVisibleChanged: {
             if (visible) {
@@ -316,7 +317,7 @@ ApplicationWindow {
                 Column {
                     spacing: 4
                     Repeater {
-                        model: [
+                        model: fingerDialog.dialogMode === "delete" ? fingerDialog.enrolledFingers : [
                             "right-index-finger", "left-index-finger",
                             "right-middle-finger", "left-middle-finger",
                             "right-ring-finger", "left-ring-finger",
@@ -372,12 +373,12 @@ ApplicationWindow {
                 Button {
                     text: fingerDialog.actionText
                     contentItem: Text {
-                        text: parent.text; color: "#a6e3a1"; font.pixelSize: 13
+                        text: parent.text; color: fingerDialog.dialogMode === "delete" ? "#f38ba8" : "#a6e3a1"; font.pixelSize: 13
                     }
                     background: Rectangle {
-                        color: parent.hovered ? "#1e2a1e" : "transparent"
-                        border.color: "#a6e3a1"; border.width: 1
-                        radius: 8; implicitWidth: 100; implicitHeight: 34
+                        color: parent.hovered ? (fingerDialog.dialogMode === "delete" ? "#2a1e24" : "#1e2a1e") : "transparent"
+                        border.color: fingerDialog.dialogMode === "delete" ? "#f38ba8" : "#a6e3a1"; border.width: 1
+                        radius: 8; implicitWidth: 110; implicitHeight: 34
                     }
                     onClicked: {
                         if (fingerDialog.dialogMode === "delete") {
