@@ -21,3 +21,4 @@ goodix5385-usb-reset = "goodix5385.scripts.usb_reset:main"
 
 [tool.setuptools]
 packages = ["goodix5385", "goodix5385.gui", "goodix5385.scripts"]
+package-data = {"goodix5385.gui" = ["qml/*"]}
