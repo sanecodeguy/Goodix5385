@@ -5,17 +5,18 @@ import QtQuick.Layouts 1.15
 
 ApplicationWindow {
     id: root
-    width: 340
-    height: 380
+    width: 360
+    height: 460
     visible: true
     flags: Qt.WindowStaysOnTopHint
     color: "#07070d"
     title: "Goodix 5385"
     minimumWidth: 320
-    minimumHeight: 340
+    minimumHeight: 400
 
     property bool deviceAvailable: false
     property string statusMessage: "Initializing..."
+    property bool sudoAuthEnabled: false
 
     signal requestEnroll(string finger)
     signal requestVerify(string finger)
@@ -35,26 +36,28 @@ ApplicationWindow {
     Rectangle {
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        width: 120; height: 1
+        width: 140; height: 1
         color: "#89b4fa30"
         radius: 1
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 32
+        anchors.margins: 28
         spacing: 0
 
         // ── Header ───────────────────────────────────────────────────────────
         Text {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 6
+            Layout.topMargin: 10
             text: "Goodix 5385 Fingerprint"
             color: "#c8cfe8"
             font.pixelSize: 15
             font.weight: Font.Light
             font.letterSpacing: 1.8
         }
+
+        Item { Layout.preferredHeight: 6 }
 
         // Device status dot + text
         Row {
@@ -76,7 +79,7 @@ ApplicationWindow {
 
             Text {
                 text: statusMessage
-                color: deviceAvailable ? "#555c6e" : "#5a3040"
+                color: deviceAvailable ? "#6b7294" : "#7a4050"
                 font.pixelSize: 10
                 font.letterSpacing: 0.4
             }
@@ -87,11 +90,11 @@ ApplicationWindow {
         // ── Action cards ──────────────────────────────────────────────────────
         Row {
             Layout.alignment: Qt.AlignHCenter
-            spacing: 14
+            spacing: 16
 
             // Enroll card
             ActionCard {
-                width: 130; height: 110
+                width: 135; height: 120
                 accentColor: "#89b4fa"
                 iconText: "+"
                 label: "Enroll"
@@ -109,7 +112,7 @@ ApplicationWindow {
 
             // Verify card
             ActionCard {
-                width: 130; height: 110
+                width: 135; height: 120
                 accentColor: "#a6e3a1"
                 iconText: "✓"
                 label: "Verify"
@@ -142,12 +145,14 @@ ApplicationWindow {
             }
         }
 
-        Item { Layout.fillHeight: true; Layout.maximumHeight: 12 }
+        Item { Layout.preferredHeight: 18 }
 
-        // ── Delete strip ──────────────────────────────────────────────────────
+        // ── Settings section ──────────────────────────────────────────────────
+
+        // Delete strip
         Rectangle {
             Layout.fillWidth: true
-            height: 40
+            height: 42
             radius: 12
             color: deleteMouse.containsMouse ? "#180a0c" : "transparent"
             border.color: deleteMouse.containsMouse ? "#f38ba860" : "#2a2a3e"
@@ -180,16 +185,92 @@ ApplicationWindow {
             }
         }
 
-        Item { Layout.fillHeight: true; Layout.maximumHeight: 16 }
+        Item { Layout.preferredHeight: 8 }
+
+        // Sudo auth toggle
+        Rectangle {
+            Layout.fillWidth: true
+            height: 42
+            radius: 12
+            color: sudoMouse.containsMouse ? "#0a0f1a" : "transparent"
+            border.color: sudoMouse.containsMouse ? "#89b4fa40" : "#2a2a3e"
+            border.width: 1.5
+
+            Behavior on color       { ColorAnimation { duration: 150 } }
+            Behavior on border.color{ ColorAnimation { duration: 150 } }
+
+            Row {
+                anchors.left: parent.left; anchors.leftMargin: 14
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 10
+
+                Text {
+                    text: "⌨"
+                    color: "#89b4fa"
+                    font.pixelSize: 13
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: "Sudo auth"
+                    color: "#c8cfe8"
+                    font.pixelSize: 12
+                    font.letterSpacing: 0.3
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            Rectangle {
+                anchors.right: parent.right; anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                width: 36; height: 20; radius: 10
+                color: root.sudoAuthEnabled ? "#1a3d2a" : "#1e2030"
+                border.color: root.sudoAuthEnabled ? "#a6e3a160" : "#2a2a3e"
+                border.width: 1
+
+                Behavior on color { ColorAnimation { duration: 200 } }
+
+                Rectangle {
+                    x: root.sudoAuthEnabled ? 18 : 2
+                    y: 2; width: 16; height: 16; radius: 8
+                    color: root.sudoAuthEnabled ? "#a6e3a1" : "#555870"
+
+                    Behavior on x     { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 200 } }
+                }
+            }
+
+            MouseArea {
+                id: sudoMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    var newVal = !root.sudoAuthEnabled
+                    root.sudoAuthEnabled = fprintBridge.setSudoAuth(newVal)
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true }
 
         // ── Quit ──────────────────────────────────────────────────────────────
-        Text {
+        Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            text: "quit"
-            color: quitMouse.containsMouse ? "#555870" : "#353748"
-            font.pixelSize: 11
-            font.letterSpacing: 1.5
-            Behavior on color { ColorAnimation { duration: 120 } }
+            width: 80; height: 32
+            radius: 16
+            color: quitMouse.containsMouse ? "#14141e" : "transparent"
+            border.color: quitMouse.containsMouse ? "#3d4158" : "#2a2a3e"
+            border.width: 1
+            Behavior on color       { ColorAnimation { duration: 120 } }
+            Behavior on border.color{ ColorAnimation { duration: 120 } }
+
+            Text {
+                anchors.centerIn: parent
+                text: "quit"
+                color: quitMouse.containsMouse ? "#8892b0" : "#555870"
+                font.pixelSize: 11
+                font.letterSpacing: 1.5
+            }
 
             MouseArea {
                 id: quitMouse
@@ -200,7 +281,7 @@ ApplicationWindow {
             }
         }
 
-        Item { Layout.fillHeight: true; Layout.maximumHeight: 4 }
+        Item { Layout.preferredHeight: 6 }
     }
 
     // ── Reusable action card component ────────────────────────────────────────
@@ -242,7 +323,7 @@ ApplicationWindow {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: card.sublabel
-                color: "#555870"
+                color: "#6b7294"
                 font.pixelSize: 11
                 font.letterSpacing: 0.3
             }
@@ -310,11 +391,11 @@ ApplicationWindow {
                     font.letterSpacing: 0.5
                 }
 
-                Rectangle { width: parent.width; height: 1; color: "#151525" }
+                Rectangle { width: parent.width; height: 1; color: "#1e2030" }
 
                 Text {
                     text: fingerDialog.prompt
-                    color: "#353748"
+                    color: "#5a6080"
                     font.pixelSize: 11
                     font.letterSpacing: 0.2
                 }
@@ -329,6 +410,7 @@ ApplicationWindow {
                         spacing: 3
 
                         Repeater {
+                            id: fingerList
                             model: fingerDialog.dialogMode === "delete"
                                    || fingerDialog.dialogMode === "verify"
                                    ? fingerDialog.enrolledFingers
@@ -339,14 +421,20 @@ ApplicationWindow {
                                       "right-thumb","left-thumb"]
 
                             delegate: Rectangle {
+                                readonly property bool isEnrolled: fingerDialog.enrolledFingers.indexOf(modelData) !== -1
+                                readonly property bool isDisabled: fingerDialog.dialogMode === "enroll" && isEnrolled
+
                                 width: parent.width
                                 height: 34
                                 radius: 8
-                                color: fingerDialog.selectedFinger === modelData
+                                color: isDisabled ? "#08080e"
+                                     : fingerDialog.selectedFinger === modelData
                                        ? "#0f1828"
                                        : (rowHover.containsMouse ? "#0c0c1a" : "transparent")
-                                border.color: fingerDialog.selectedFinger === modelData ? "#89b4fa30" : "transparent"
+                                border.color: isDisabled ? "transparent"
+                                             : fingerDialog.selectedFinger === modelData ? "#89b4fa30" : "transparent"
                                 border.width: 1
+                                opacity: isDisabled ? 0.45 : 1.0
 
                                 Row {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -357,13 +445,17 @@ ApplicationWindow {
                                     Rectangle {
                                         width: 7; height: 7; radius: 3.5
                                         anchors.verticalCenter: parent.verticalCenter
-                                        color: fingerDialog.selectedFinger === modelData ? "#89b4fa" : "#1e2030"
+                                        color: isDisabled ? "#1e2030"
+                                             : fingerDialog.selectedFinger === modelData ? "#89b4fa" : "#2a2d42"
                                         Behavior on color { ColorAnimation { duration: 150 } }
                                     }
 
                                     Text {
-                                        text: modelData.replace(/-/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase() })
-                                        color: fingerDialog.selectedFinger === modelData ? "#c8cfe8" : "#3d4158"
+                                        text: isEnrolled && fingerDialog.dialogMode === "enroll"
+                                              ? modelData.replace(/-/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase() }) + " ✓"
+                                              : modelData.replace(/-/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase() })
+                                        color: isDisabled ? "#353748"
+                                             : fingerDialog.selectedFinger === modelData ? "#c8cfe8" : "#6b7294"
                                         font.pixelSize: 12
                                         font.letterSpacing: 0.2
                                         Behavior on color { ColorAnimation { duration: 150 } }
@@ -374,8 +466,8 @@ ApplicationWindow {
                                     id: rowHover
                                     anchors.fill: parent
                                     hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: fingerDialog.selectedFinger = modelData
+                                    cursorShape: isDisabled ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                    onClicked: { if (!isDisabled) fingerDialog.selectedFinger = modelData }
                                 }
                             }
                         }
@@ -393,12 +485,12 @@ ApplicationWindow {
                         width: 90; height: 36; radius: 18
                         color: cancelDlgMouse.containsMouse ? "#1a1a26" : "transparent"
                         border.color: "#1e2030"; border.width: 1
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Cancel"
-                            color: "#353748"
-                            font.pixelSize: 12
-                        }
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Cancel"
+                                color: "#5a6080"
+                                font.pixelSize: 12
+                            }
                         MouseArea {
                             id: cancelDlgMouse; anchors.fill: parent; hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
