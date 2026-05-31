@@ -1,21 +1,24 @@
 <div align="center">
 
 # Goodix 5385 Fingerprint
-
 ### A native fingerprint GUI for Linux — built for Arch, Hyprland & the Dell XPS 13
 
-![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Qt](https://img.shields.io/badge/Qt-41CD52?style=for-the-badge&logo=qt&logoColor=white)
-![systemd](https://img.shields.io/badge/systemd-FFD700?style=for-the-badge&logo=linux&logoColor=black)
-![Arch Linux](https://img.shields.io/badge/Arch_Linux-1793D1?style=for-the-badge&logo=arch-linux&logoColor=white)
-![Hyprland](https://img.shields.io/badge/Hyprland-58E1FF?style=for-the-badge&logo=wayland&logoColor=black)
-![License: MIT](https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge)
+<img src="https://img.shields.io/badge/Python-1a3a5c?style=for-the-badge&logo=python&logoColor=85B7EB" />
+<img src="https://img.shields.io/badge/Qt-0a3d22?style=for-the-badge&logo=qt&logoColor=5DCAA5" />
+<img src="https://img.shields.io/badge/systemd-3d2a00?style=for-the-badge&logo=linux&logoColor=FAC775" />
+<img src="https://img.shields.io/badge/Arch_Linux-0d2540?style=for-the-badge&logo=arch-linux&logoColor=378ADD" />
+<img src="https://img.shields.io/badge/Hyprland-1a3a3a?style=for-the-badge&logo=wayland&logoColor=1D9E75" />
+<img src="https://img.shields.io/badge/License_MIT-1a2e1a?style=for-the-badge&logoColor=97C459" />
 
-<br>
+<br><br>
 
-<img width="1280" height="720" alt="2026-05-3109-10-13-ezgif com-optimize" src="https://github.com/user-attachments/assets/dc3088d6-9627-4571-acdd-1c6f8d5b7f82" />
-
-
+<table>
+  <tr>
+    <td><img src="https://github.com/user-attachments/assets/f3351c5a-78ce-4a32-a2dc-852682f519d0" /></td>
+    <td><img src="https://github.com/user-attachments/assets/b71db3ef-ae8c-4f9e-9766-83751d97b69a" /></td>
+    <td><img src="https://github.com/user-attachments/assets/f6a4ed02-eba4-48b6-bc3b-2161f0290e51" /></td>
+  </tr>
+</table>
 
 </div>
 
@@ -36,13 +39,11 @@ Designed specifically for the **Goodix 5385** sensor (`27c6:5385`), found in:
 ## Install
 
 **Via AUR (recommended):**
-
 ```bash
 yay -S goodix5385
 ```
 
 **Manual build:**
-
 ```bash
 git clone https://github.com/sanecodeguy/Goodix5385
 cd Goodix5385
@@ -50,7 +51,6 @@ makepkg -si
 ```
 
 **Pip (no package manager):**
-
 ```bash
 pip install --break-system-packages .
 ```
