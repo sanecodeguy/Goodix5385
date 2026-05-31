@@ -20,8 +20,4 @@ goodix5385-gui = "goodix5385.gui.main:main"
 goodix5385-usb-reset = "goodix5385.scripts.usb_reset:main"
 
 [tool.setuptools]
-package-dir = {"" = "."}
 packages = ["goodix5385", "goodix5385.gui", "goodix5385.scripts"]
-
-[tool.setuptools.packages.find]
-include = ["goodix5385*"]
