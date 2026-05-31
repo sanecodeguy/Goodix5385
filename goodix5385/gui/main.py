@@ -231,6 +231,40 @@ def _sudo_auth_set(enable: bool) -> bool:
         return False
 
 
+def _ensure_deps():
+    """Install missing system dependencies (fprintd, libfprint-goodix53x5)."""
+    missing = []
+    if not shutil.which("fprintd-list"):
+        missing.append("fprintd")
+    try:
+        r = subprocess.run(["pacman", "-Qi", "libfprint-goodix53x5"],
+                           capture_output=True, text=True)
+        if r.returncode != 0 or "Name" not in r.stdout:
+            missing.append("libfprint-goodix53x5")
+    except FileNotFoundError:
+        missing.append("libfprint-goodix53x5")
+
+    if not missing:
+        return
+
+    print(f"  -> Missing deps: {', '.join(missing)} — installing...")
+    pkexec = shutil.which("pkexec") or shutil.which("sudo") or ""
+    if not pkexec:
+        print("  ERROR: need pkexec or sudo to install deps")
+        return
+
+    for pkg in missing:
+        if pkg == "fprintd":
+            subprocess.run([pkexec, "pacman", "-S", "--noconfirm", "--needed", "fprintd"],
+                           capture_output=True)
+        elif pkg == "libfprint-goodix53x5":
+            subprocess.run([pkexec, "sh", "-c",
+                           f"yay -S --noconfirm --needed libfprint-goodix53x5 2>&1 || "
+                           f"pacman -S --noconfirm --needed libfprint-goodix53x5 2>&1 || true"],
+                           capture_output=True)
+    print("  -> Deps installed")
+
+
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("Goodix5385 Fingerprint")
@@ -250,6 +284,7 @@ def main():
         return 1
 
     # ── Startup tasks (best-effort) ──────────────────────────────────────────
+    _ensure_deps()
     _ensure_systemd_service()
     _reset_usb_and_fprintd()
     time.sleep(0.5)
