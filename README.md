@@ -10,7 +10,15 @@ suspend/resume).
 
 ![demo](demo.gif)
 
-## Install (PKGBUILD)
+## Install
+
+**AUR (recommended)** — builds from the GitHub release tarball:
+
+```bash
+yay -S goodix5385
+```
+
+**Manual PKGBUILD** — clone and build locally:
 
 ```bash
 git clone https://github.com/sanecodeguy/Goodix5385
@@ -18,7 +26,7 @@ cd Goodix5385
 makepkg -si
 ```
 
-Or if you want to install it manually:
+**Manual install** — copy files yourself:
 
 ```bash
 sudo pacman -S fprintd python-pyusb python-pyside6
